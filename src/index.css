@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100vh;
+  }
+
+  /* Dark scrollbar for dashboard pages */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+@layer components {
+  /* Primary amber gradient button */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-gradient-to-br from-[#ffbe0b] to-[#f5a623]
+           text-[#111] border-none rounded-[10px]
+           font-bold cursor-pointer
+           shadow-amber-sm
+           transition-all duration-200 ease-out;
+  }
+  .btn-primary:hover {
+    @apply -translate-y-[1px] shadow-amber-md;
+    background: linear-gradient(135deg, #ffc929, #ffb300);
+  }
+  .btn-primary:active {
+    @apply translate-y-0;
+    box-shadow: 0 6px 16px rgba(255, 179, 0, 0.3);
+  }
+
+  /* Ghost / outline button */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center
+           bg-transparent border border-djati-border-light rounded-[10px]
+           text-[#d4d4d4] font-semibold cursor-pointer
+           transition-all duration-200 ease-out;
+  }
+  .btn-ghost:hover {
+    @apply bg-white/[0.06] border-white/30;
+  }
+
+  /* Danger outline button */
+  .btn-danger-outline {
+    @apply inline-flex items-center justify-center
+           bg-status-critical-bg border border-status-critical rounded-[10px]
+           text-status-critical font-bold cursor-pointer
+           transition-all duration-200 ease-out;
+  }
+  .btn-danger-outline:hover {
+    @apply bg-[rgba(244,67,54,0.3)];
+  }
+
+  /* Success outline button */
+  .btn-success-outline {
+    @apply inline-flex items-center justify-center
+           bg-status-resolved-bg border border-[#4caf50] rounded-[10px]
+           text-status-resolved font-bold cursor-pointer
+           transition-all duration-200 ease-out;
+  }
+  .btn-success-outline:hover {
+    @apply bg-[rgba(76,175,80,0.3)];
+  }
+
+  /* Danger solid button (gradient) */
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-gradient-to-br from-[#ef5350] to-[#d32f2f]
+           text-white border-none rounded-[10px]
+           font-bold cursor-pointer
+           shadow-red-sm
+           transition-all duration-200 ease-out;
+  }
+  .btn-danger:hover {
+    @apply -translate-y-[1px] shadow-red-md;
+  }
+
+  /* Table row hover */
+  .table-row-hover {
+    @apply transition-colors duration-150;
+  }
+  .table-row-hover:hover {
+    @apply bg-white/[0.02];
+  }
+
+  /* Icon action button */
+  .btn-icon {
+    @apply w-[34px] h-[34px] rounded-lg border border-white/[0.08]
+           bg-transparent text-white/40 cursor-pointer
+           flex items-center justify-center p-0
+           transition-all duration-200;
+  }
+  .btn-icon:hover {
+    @apply bg-white/[0.06] text-white/80;
+  }
+
+  /* Form input base */
+  .input-base {
+    @apply w-full px-4 py-[0.7rem] rounded-lg
+           border border-djati-border-light
+           bg-white/[0.04] text-[#eef2ff]
+           font-primary text-[0.86rem]
+           outline-none
+           transition-all duration-200;
+  }
+  .input-base:focus {
+    @apply border-djati-amber shadow-[0_0_0_3px_rgba(255,179,0,0.12)];
+  }
+
+  /* Form label */
+  .label-base {
+    @apply text-[0.78rem] font-semibold text-white/60 tracking-wide;
+  }
+
+  /* Modal overlay */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/75 backdrop-blur-[4px]
+           z-[1000] flex items-center justify-center p-8;
+  }
+
+  /* Panel card */
+  .panel {
+    @apply bg-djati-panel border border-djati-border rounded-[14px];
+  }
+
+  /* Panel card with amber border */
+  .panel-amber {
+    @apply bg-djati-panel border border-djati-border-amber rounded-[14px];
+  }
+}
