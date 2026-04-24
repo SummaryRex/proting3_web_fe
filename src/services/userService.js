@@ -1,66 +1,102 @@
 import api, { useMock } from './api';
 import { initialUsers } from '../mocks/userData';
 
-/**
- * Get all users.
- * @param {{ role?: string, search?: string }} filters
- * @returns {Promise<Array>}
- */
+// 🔥 normalize biar UI konsisten
+const normalizeUser = (user) => ({
+  ...user,
+  status: user.status?.toLowerCase?.() || 'active',
+  role: user.role || 'Mechanic',
+});
+
+// 🔍 GET USERS
 export async function getUsers(filters = {}) {
   if (useMock) {
     await new Promise((r) => setTimeout(r, 400));
     let data = [...initialUsers];
-    if (filters.role && filters.role !== 'all') data = data.filter((u) => u.role === filters.role);
-    if (filters.search) data = data.filter((u) => u.name.toLowerCase().includes(filters.search.toLowerCase()));
-    return data;
+
+    if (filters.role && filters.role !== 'all') {
+      data = data.filter(
+        (u) => u.role.toLowerCase() === filters.role.toLowerCase()
+      );
+    }
+
+    if (filters.search) {
+      data = data.filter((u) =>
+        u.name.toLowerCase().includes(filters.search.toLowerCase())
+      );
+    }
+
+    return data.map(normalizeUser);
   }
 
   const { data } = await api.get('/users', { params: filters });
-  return data;
+  const users = data.data ?? data;
+
+  return users.map(normalizeUser);
 }
 
-/**
- * Create a new user.
- * @param {{ name: string, role: string, username: string }} userData
- * @returns {Promise<Object>}
- */
+// ➕ CREATE USER
 export async function createUser(userData) {
   if (useMock) {
     await new Promise((r) => setTimeout(r, 600));
-    return { ...userData, status: 'Active', id: Date.now() };
+    return normalizeUser({
+      ...userData,
+      status: 'active',
+      id: Date.now(),
+    });
   }
 
-  const { data } = await api.post('/users', userData);
-  return data;
+  const payload = {
+    name: userData.name,
+    username: userData.username,
+    password: userData.accessKey, // 🔥 mapping FE → BE
+    role: userData.role,
+  };
+
+  const { data } = await api.post('/users', payload);
+  return normalizeUser(data.data ?? data);
 }
 
-/**
- * Update user by ID.
- * @param {string|number} id
- * @param {Object} updates
- * @returns {Promise<Object>}
- */
+// ✏️ UPDATE USER (EDIT)
 export async function updateUser(id, updates) {
   if (useMock) {
     await new Promise((r) => setTimeout(r, 500));
-    return { id, ...updates };
+    return normalizeUser({ id, ...updates });
   }
 
-  const { data } = await api.put(`/users/${id}`, updates);
-  return data;
+  const payload = {
+    name: updates.name,
+    username: updates.username,
+    role: updates.role,
+  };
+
+  // kalau user edit password
+  if (updates.accessKey) {
+    payload.password = updates.accessKey;
+  }
+
+  const { data } = await api.put(`/users/${id}`, payload);
+  return normalizeUser(data.data ?? data);
 }
 
-/**
- * Disable a user account.
- * @param {string|number} id
- * @returns {Promise<Object>}
- */
+// 🚫 DISABLE USER
 export async function disableUser(id) {
   if (useMock) {
     await new Promise((r) => setTimeout(r, 500));
-    return { id, status: 'Inactive' };
+    return { id, status: 'inactive' };
   }
 
   const { data } = await api.patch(`/users/${id}/disable`);
+  return normalizeUser(data.data ?? data);
+}
+
+// 🔐 RESET PASSWORD
+export async function resetPassword(id) {
+  if (useMock) {
+    await new Promise((r) => setTimeout(r, 500));
+    return { success: true };
+  }
+
+  const { data } = await api.post(`/users/${id}/reset-password`);
   return data;
 }

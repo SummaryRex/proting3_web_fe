@@ -38,6 +38,33 @@
   }
 }
 
+select {
+  color: #ffffff !important;
+}
+
+/* option styling fix (dark mode stable) */
+select option {
+  background-color: #1f2230 !important;
+  color: #ffffff !important;
+}
+
+/* selected/highlight option */
+select option:checked {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+/* hover (support sebagian browser) */
+select option:hover {
+  background-color: #374151 !important;
+  color: #ffffff !important;
+}
+
+/* fix weird pale text in some browsers */
+select:focus option {
+  color: #ffffff !important;
+}
+
 @layer components {
   /* Primary amber gradient button */
   .btn-primary {
