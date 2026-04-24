@@ -41,17 +41,29 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     setIsLoading(true);
     setError(null);
-    try {
-      const { token, user: userData } = await loginApi(username, password);
-      saveAuth(token, userData);
-      setUser(userData);
-    } catch (err) {
-      const message = err.response?.data?.message || err.message || 'Login failed';
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
+
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        // dummy credentials
+        if (username === "admin" && password === "123") {
+          const fakeToken = "dummy-token";
+          const fakeUser = {
+            username: "admin",
+            role: "admin"
+          };
+
+          saveAuth(fakeToken, fakeUser);
+          setUser(fakeUser);
+
+          setIsLoading(false);
+          resolve(true);
+        } else {
+          setIsLoading(false);
+          setError("Username atau password salah");
+          reject(new Error("Invalid credentials"));
+        }
+      }, 500);
+    });
   }, []);
 
   // ── Logout ──
