@@ -1,102 +1,143 @@
-import api, { useMock } from './api';
-import { initialUsers } from '../mocks/userData';
+import api from './api';
 
-// 🔥 normalize biar UI konsisten
+// ─────────────────────────────
+// NORMALIZE
+// ─────────────────────────────
 const normalizeUser = (user) => ({
-  ...user,
-  status: user.status?.toLowerCase?.() || 'active',
-  role: user.role || 'Mechanic',
+  id: user.id,
+  name: user.name ?? '', // ❗ tidak fallback ke username lagi
+  username: user.username,
+  role: user.role,
+  status: user.is_active ? 'active' : 'inactive',
+  createdAt: user.created_at,
 });
 
-// 🔍 GET USERS
+// ─────────────────────────────
+// GET USERS
+// ─────────────────────────────
 export async function getUsers(filters = {}) {
-  if (useMock) {
-    await new Promise((r) => setTimeout(r, 400));
-    let data = [...initialUsers];
-
-    if (filters.role && filters.role !== 'all') {
-      data = data.filter(
-        (u) => u.role.toLowerCase() === filters.role.toLowerCase()
-      );
-    }
-
-    if (filters.search) {
-      data = data.filter((u) =>
-        u.name.toLowerCase().includes(filters.search.toLowerCase())
-      );
-    }
+  try {
+    const { data } = await api.get('/admin/users', {
+      params: filters,
+    });
 
     return data.map(normalizeUser);
+  } catch (error) {
+    console.error('GET USERS ERROR:', error);
+    throw error.response?.data || error.message;
   }
-
-  const { data } = await api.get('/users', { params: filters });
-  const users = data.data ?? data;
-
-  return users.map(normalizeUser);
 }
 
-// ➕ CREATE USER
+// ─────────────────────────────
+// CREATE USER
+// ─────────────────────────────
 export async function createUser(userData) {
-  if (useMock) {
-    await new Promise((r) => setTimeout(r, 600));
-    return normalizeUser({
-      ...userData,
-      status: 'active',
-      id: Date.now(),
-    });
+  try {
+    const payload = {
+      name: userData.name,
+      username: userData.username,
+      password: userData.password,
+      role: userData.role,
+    };
+
+    const { data } = await api.post('/admin/users', payload);
+
+    return normalizeUser(data);
+  } catch (error) {
+    console.error('CREATE USER ERROR:', error);
+    throw error.response?.data || error.message;
   }
-
-  const payload = {
-    name: userData.name,
-    username: userData.username,
-    password: userData.accessKey, // 🔥 mapping FE → BE
-    role: userData.role,
-  };
-
-  const { data } = await api.post('/users', payload);
-  return normalizeUser(data.data ?? data);
 }
 
-// ✏️ UPDATE USER (EDIT)
+// ─────────────────────────────
+// UPDATE USER
+// ─────────────────────────────
 export async function updateUser(id, updates) {
-  if (useMock) {
-    await new Promise((r) => setTimeout(r, 500));
-    return normalizeUser({ id, ...updates });
+  try {
+    const payload = {
+      name: updates.name,
+      username: updates.username,
+      role: updates.role,
+    };
+
+    if (updates.status !== undefined) {
+      payload.is_active = updates.status === 'active';
+    }
+
+    if (updates.password) {
+      payload.password = updates.password;
+    }
+
+    const { data } = await api.put(`/admin/users/${id}`, payload);
+
+    return normalizeUser(data);
+  } catch (error) {
+    console.error('UPDATE USER ERROR:', error);
+    throw error.response?.data || error.message;
   }
-
-  const payload = {
-    name: updates.name,
-    username: updates.username,
-    role: updates.role,
-  };
-
-  // kalau user edit password
-  if (updates.accessKey) {
-    payload.password = updates.accessKey;
-  }
-
-  const { data } = await api.put(`/users/${id}`, payload);
-  return normalizeUser(data.data ?? data);
 }
 
-// 🚫 DISABLE USER
+// ─────────────────────────────
+// DISABLE USER
+// ─────────────────────────────
 export async function disableUser(id) {
-  if (useMock) {
-    await new Promise((r) => setTimeout(r, 500));
-    return { id, status: 'inactive' };
-  }
+  try {
+    const { data } = await api.put(`/admin/users/${id}`, {
+      is_active: false,
+    });
 
-  const { data } = await api.patch(`/users/${id}/disable`);
-  return normalizeUser(data.data ?? data);
+    return {
+      id: data.id,
+      status: data.is_active ? 'active' : 'inactive',
+    };
+  } catch (error) {
+    console.error('DISABLE USER ERROR:', error);
+    throw error.response?.data || error.message;
+  }
 }
 
-// 🔐 RESET PASSWORD
-export async function resetPassword(id) {
-  if (useMock) {
-    await new Promise((r) => setTimeout(r, 500));
-    return { success: true };
-  }
+// ─────────────────────────────
+// ENABLE USER
+// ─────────────────────────────
+export async function enableUser(id) {
+  try {
+    const { data } = await api.put(`/admin/users/${id}`, {
+      is_active: true,
+    });
 
-  const { data } = await api.post(`/users/${id}/reset-password`);
-  return data;
+    return {
+      id: data.id,
+      status: data.is_active ? 'active' : 'inactive',
+    };
+  } catch (error) {
+    console.error('ENABLE USER ERROR:', error);
+    throw error.response?.data || error.message;
+  }
+}
+
+// ─────────────────────────────
+// DELETE USER
+// ─────────────────────────────
+export async function deleteUser(id) {
+  try {
+    await api.delete(`/admin/users/${id}`);
+    return { success: true };
+  } catch (error) {
+    console.error('DELETE USER ERROR:', error);
+    throw error.response?.data || error.message;
+  }
+}
+
+// ─────────────────────────────
+// GET DRIVERS ONLY (UNTUK ASSIGNMENT)
+// ─────────────────────────────
+export async function getDrivers() {
+  try {
+    const users = await getUsers();
+
+    return users.filter((user) => user.role === 'driver');
+  } catch (error) {
+    console.error('GET DRIVERS ERROR:', error);
+    throw error;
+  }
 }

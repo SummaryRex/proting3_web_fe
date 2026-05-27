@@ -6,8 +6,8 @@ export const reportData = {
 };
 
 export const tableRows = [
-  { id: 'REP-8821', equip: 'Excavator EX-45', operator: 'Lee Heeseung', date: 'Oct 24, 2023', status: 'Pending' },
-  { id: 'REP-8815', equip: 'Dump Truck DT-08', operator: 'Mackenyu Arata', date: 'Oct 22, 2023', status: 'Pending' },
-  { id: 'REP-8812', equip: 'Bulldozer BD-12', operator: 'Jang Wonyoung', date: 'Oct 20, 2023', status: 'Pending' },
-  { id: 'REP-8825', equip: 'Loader LD-05', operator: 'Kim Jisoo', date: 'Oct 25, 2023', status: 'Pending' },
+  { id: 'REP-8821', equip: 'Excavator EX-45', driver: 'Lee Heeseung', date: 'Oct 24, 2023', status: 'Pending' },
+  { id: 'REP-8815', equip: 'Dump Truck DT-08', driver: 'Mackenyu Arata', date: 'Oct 22, 2023', status: 'Pending' },
+  { id: 'REP-8812', equip: 'Bulldozer BD-12', driver: 'Jang Wonyoung', date: 'Oct 20, 2023', status: 'Pending' },
+  { id: 'REP-8825', equip: 'Loader LD-05', driver: 'Kim Jisoo', date: 'Oct 25, 2023', status: 'Pending' },
 ];

@@ -4,18 +4,24 @@ const variantMap = {
   active:     { bg: 'bg-status-resolved-bg', text: 'text-status-resolved', border: 'border-status-resolved-border' },
   resolved:   { bg: 'bg-status-resolved-bg', text: 'text-status-resolved', border: 'border-status-resolved-border' },
   completed:  { bg: 'bg-status-resolved-bg', text: 'text-status-resolved', border: 'border-status-resolved-border' },
+
   progress:   { bg: 'bg-status-progress-bg', text: 'text-status-progress', border: 'border-status-progress-border' },
   in_progress:{ bg: 'bg-status-progress-bg', text: 'text-status-progress', border: 'border-status-progress-border' },
   scheduled:  { bg: 'bg-status-progress-bg', text: 'text-status-progress', border: 'border-status-progress-border' },
+
   critical:   { bg: 'bg-status-critical-bg', text: 'text-status-critical', border: 'border-status-critical-border' },
   rejected:   { bg: 'bg-status-critical-bg', text: 'text-status-critical', border: 'border-status-critical-border' },
+
   high:       { bg: 'bg-[rgba(245,124,0,0.18)]', text: 'text-[#ffa726]', border: 'border-[rgba(245,124,0,0.35)]' },
   medium:     { bg: 'bg-status-pending-bg',  text: 'text-status-pending',  border: 'border-status-pending-border' },
   low:        { bg: 'bg-status-resolved-bg', text: 'text-status-resolved', border: 'border-status-resolved-border' },
+
   inactive:   { bg: 'bg-status-inactive-bg', text: 'text-status-inactive', border: 'border-status-inactive-border' },
+
+  // ROLE
   admin:      { bg: 'bg-[rgba(255,152,0,0.18)]', text: 'text-[#ff9800]', border: 'border-[rgba(255,152,0,0.35)]' },
-  mechanic:   { bg: 'bg-status-progress-bg', text: 'text-status-progress', border: 'border-status-progress-border' },
-  operator:   { bg: 'bg-status-resolved-bg', text: 'text-status-resolved', border: 'border-status-resolved-border' },
+  driver:     { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-400/30'},
+  teknisi:    { bg: 'bg-status-progress-bg', text: 'text-status-progress', border: 'border-status-progress-border' },
 };
 
 /**

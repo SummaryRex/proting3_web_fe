@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Edit, Ban, Eye, Filter, ChevronDown } from 'lucide-react';
+import { Edit, Ban, Eye, Filter, ChevronDown, Trash } from 'lucide-react';
 import DashboardLayout from '../components/layouts/DashboardLayout';
 import DataTable from '../components/ui/DataTable';
 import SearchInput from '../components/ui/SearchInput';
 import StatusBadge from '../components/ui/StatusBadge';
 import AddUserModal from '../components/modals/AddUserModal';
+
 import {
   getUsers,
   createUser,
   updateUser,
-  disableUser
+  disableUser,
+  deleteUser,
+  enableUser,
 } from '../services/userService';
 
 const tableColumns = [
@@ -19,21 +22,58 @@ const tableColumns = [
   { label: 'ACTIONS', className: '!text-right !pr-5' },
 ];
 
+const roleLabel = {
+  admin: 'Admin',
+  driver: 'Driver',
+  teknisi: 'Teknisi',
+};
+
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null); 
+  const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const normalizeRole = (role) => {
+    if (!role) return '';
+
+    const value = role.toLowerCase();
+
+    switch (value) {
+      case 'operator':
+      case 'driver':
+        return 'driver';
+      case 'mechanic':
+      case 'technician':
+      case 'teknisi':
+        return 'teknisi';
+      case 'admin':
+        return 'admin';
+      default:
+        return value;
+    }
+  };
+
+  const getRoleLabel = (role) => {
+    const normalized = normalizeRole(role);
+    return roleLabel[normalized] || role;
+  };
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const data = await getUsers();
+
+      const data = await getUsers({
+        search,
+        role: roleFilter,
+      });
+
       setUsers(data);
     } catch (err) {
       console.error(err);
+      alert(err.message || 'Gagal mengambil data user');
     } finally {
       setLoading(false);
     }
@@ -41,20 +81,36 @@ export default function UserManagement() {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [search, roleFilter]);
 
   const filteredUsers = users.filter((u) => {
-    const matchSearch = u.name.toLowerCase().includes(search.toLowerCase());
+    const displayName = u.name || u.username || '';
+    const userRole = normalizeRole(u.role);
+
+    const matchSearch = displayName
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
     const matchRole =
-      roleFilter === 'all' ||
-      u.role.toLowerCase() === roleFilter.toLowerCase();
+      roleFilter === 'all' || userRole === normalizeRole(roleFilter);
+
     return matchSearch && matchRole;
   });
 
   const handleSaveUser = async (formData) => {
     try {
+      const payload = {
+        name: formData.name,
+        username: formData.username,
+        role: normalizeRole(formData.role),
+      };
+
+      if (formData.password) {
+        payload.password = formData.password;
+      }
+
       if (selectedUser) {
-        const updated = await updateUser(selectedUser.id, formData);
+        const updated = await updateUser(selectedUser.id, payload);
 
         setUsers((prev) =>
           prev.map((u) =>
@@ -62,7 +118,7 @@ export default function UserManagement() {
           )
         );
       } else {
-        const newUser = await createUser(formData);
+        const newUser = await createUser(payload);
         setUsers((prev) => [newUser, ...prev]);
       }
 
@@ -70,6 +126,12 @@ export default function UserManagement() {
       setSelectedUser(null);
     } catch (err) {
       console.error(err);
+
+      if (err.errors) {
+        alert(Object.values(err.errors).flat().join('\n'));
+      } else {
+        alert(err.message || 'Gagal menyimpan user');
+      }
     }
   };
 
@@ -81,33 +143,47 @@ export default function UserManagement() {
 
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === id
-            ? { ...u, status: res.status || 'inactive' }
-            : u
+          u.id === id ? { ...u, status: res.status || 'inactive' } : u
         )
       );
     } catch (err) {
       console.error(err);
+      alert('Gagal disable user');
     }
   };
 
-  const handleResetPassword = async (id, name) => {
-    if (!window.confirm(`Reset password for ${name}?`)) return;
+  const handleDeleteUser = async (id, name) => {
+    if (!window.confirm(`Delete user ${name}?`)) return;
 
     try {
-      await fetch(`/api/users/${id}/reset-password`, {
-        method: 'POST',
-      });
-
-      alert('Password berhasil di-reset');
+      await deleteUser(id);
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      alert('User berhasil dihapus');
     } catch (err) {
       console.error(err);
+      alert('Gagal hapus user');
+    }
+  };
+
+  const handleEnableUser = async (id, name) => {
+    if (!window.confirm(`Activate user ${name}?`)) return;
+
+    try {
+      const res = await enableUser(id);
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === id ? { ...u, status: res.status || 'active' } : u
+        )
+      );
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengaktifkan user');
     }
   };
 
   return (
     <DashboardLayout title="User Management">
-      {/* Filter Bar */}
       <section className="flex items-center justify-between gap-4 mb-5">
         <SearchInput
           placeholder="Search users by name..."
@@ -125,18 +201,10 @@ export default function UserManagement() {
                          !bg-djati-panel2 !border-white/15 
                          !text-white !text-[0.82rem] !font-semibold"
             >
-              <option value="all" className="bg-djati-panel2 text-white">
-                All Roles
-              </option>
-              <option value="Admin" className="bg-djati-panel2 text-white">
-                Admin
-              </option>
-              <option value="Mechanic" className="bg-djati-panel2 text-white">
-                Mechanic
-              </option>
-              <option value="Operator" className="bg-djati-panel2 text-white">
-                Operator
-              </option>
+              <option value="all">All Roles</option>
+              <option value="admin">Admin</option>
+              <option value="teknisi">Teknisi</option>
+              <option value="driver">Driver</option>
             </select>
 
             <ChevronDown
@@ -145,7 +213,7 @@ export default function UserManagement() {
             />
           </div>
 
-          <button className="btn-ghost gap-2 px-4 py-2.5 text-[0.82rem] font-semibold !bg-djati-panel2 !border-white/15">
+          <button className="btn-ghost gap-2 px-4 py-2.5 text-[0.82rem] font-semibold">
             <Filter size={16} />
             Filter
           </button>
@@ -162,60 +230,86 @@ export default function UserManagement() {
         </div>
       </section>
 
-      {/* Table */}
       <section>
         <DataTable
           columns={tableColumns}
           data={filteredUsers}
-          renderRow={(u, i) => (
-            <tr key={u.id || u.name + i} className="table-row-hover">
-              <td className="px-4 py-3.5 border-b border-white/[0.04]">
-                <div className="flex items-center gap-3">
-                  <div className="w-[34px] h-[34px] rounded-full bg-[#2a2c36] flex items-center justify-center font-bold text-[0.78rem] text-white/55">
-                    {u.name.charAt(0)}
+          loading={loading}
+          renderRow={(u, i) => {
+            const displayName = u.name || u.username;
+
+            return (
+              <tr key={u.id || i} className="table-row-hover">
+                <td className="px-4 py-3.5 border-b">
+                  <div className="flex items-center gap-3">
+                    <div className="w-[34px] h-[34px] rounded-full bg-[#2a2c36] flex items-center justify-center font-bold text-[0.78rem]">
+                      {(displayName || 'U').charAt(0)}
+                    </div>
+
+                    <span className="font-semibold">{displayName}</span>
                   </div>
-                  <span className="font-semibold text-djati-text-bright">
-                    {u.name}
-                  </span>
-                </div>
-              </td>
+                </td>
 
-              <td className="px-4 py-3.5 border-b border-white/[0.04]">
-                <StatusBadge variant={u.role.toLowerCase()}>
-                  {u.role}
-                </StatusBadge>
-              </td>
+                <td className="px-4 py-3.5 border-b">
+                  <StatusBadge variant={normalizeRole(u.role)}>
+                    {getRoleLabel(u.role)}
+                  </StatusBadge>
+                </td>
 
-              <td className="px-4 py-3.5 border-b border-white/[0.04]">
-                <StatusBadge variant={u.status.toLowerCase()} dot>
-                  {u.status}
-                </StatusBadge>
-              </td>
+                <td className="px-4 py-3.5 border-b">
+                  <StatusBadge variant={(u.status || '').toLowerCase()} dot>
+                    {u.status}
+                  </StatusBadge>
+                </td>
 
-              <td className="px-4 py-3.5 text-right pr-5 border-b border-white/[0.04]">
-                <div className="flex justify-end gap-1.5">
-                  <button className="btn-icon" onClick={() => { setSelectedUser(u); setShowModal(true); }}>
-                    <Edit size={16} />
-                  </button>
+                <td className="px-4 py-3.5 text-right pr-5 border-b">
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      className="btn-icon"
+                      onClick={() => {
+                        setSelectedUser({
+                          ...u,
+                          role: normalizeRole(u.role),
+                        });
+                        setShowModal(true);
+                      }}
+                    >
+                      <Edit size={16} />
+                    </button>
 
-                  <button className="btn-icon" onClick={() => handleDisableUser(u.id, u.name)}>
-                    <Ban size={16} />
-                  </button>
+                    {u.status === 'active' ? (
+                      <button
+                        className="btn-icon"
+                        onClick={() => handleDisableUser(u.id, displayName)}
+                      >
+                        <Ban size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        className="btn-icon"
+                        onClick={() => handleEnableUser(u.id, displayName)}
+                      >
+                        <Eye size={16} />
+                      </button>
+                    )}
 
-                  <button className="btn-icon" onClick={() => handleResetPassword(u.id, u.name)}>
-                    <Eye size={16} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          )}
+                    <button
+                      className="btn-icon"
+                      onClick={() => handleDeleteUser(u.id, displayName)}
+                    >
+                      <Trash size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          }}
         />
       </section>
 
-      {/* MODAL */}
       {showModal && (
         <AddUserModal
-          user={selectedUser} 
+          user={selectedUser}
           onClose={() => {
             setShowModal(false);
             setSelectedUser(null);
