@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { UserPlus, Copy, RefreshCw } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 import ModalShell from '../ui/ModalShell';
 
 export default function AddUserModal({ onClose, onCreate, user }) {
@@ -7,43 +7,50 @@ export default function AddUserModal({ onClose, onCreate, user }) {
 
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
-  const [role, setRole] = useState('Mechanic');
-  const [accessKey, setAccessKey] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState('teknisi');
 
   useEffect(() => {
     if (user) {
       setName(user.name || '');
       setUsername(user.username || '');
-      setRole(user.role || 'Mechanic');
-      setAccessKey('');
+      setRole(user.role || 'teknisi');
+      setPassword('');
     } else {
-      setAccessKey(generateKey(role, name));
+      setName('');
+      setUsername('');
+      setPassword('');
+      setRole('teknisi');
     }
   }, [user]);
 
-  function generateKey(r, n) {
-    const clean = (n || 'User').replace(/\s+/g, '');
-    const rand = String(Math.floor(Math.random() * 100)).padStart(2, '0');
-    return r + rand + clean;
-  }
-
-  const copyKey = () => {
-    navigator.clipboard.writeText(accessKey).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    });
-  };
-
   const handleCreate = () => {
-    if (!name.trim() || !username.trim()) return;
+    if (!username.trim()) {
+      alert('Username wajib diisi');
+      return;
+    }
 
-    onCreate({
+    if (!isEdit && password.trim().length < 6) {
+      alert('Password minimal 6 karakter');
+      return;
+    }
+
+    if (isEdit && password.trim() && password.trim().length < 6) {
+      alert('Password minimal 6 karakter');
+      return;
+    }
+
+    const payload = {
       name: name.trim(),
       username: username.trim(),
       role,
-      accessKey: accessKey || undefined,
-    });
+    };
+
+    if (password.trim()) {
+      payload.password = password.trim();
+    }
+
+    onCreate(payload);
   };
 
   return (
@@ -54,32 +61,34 @@ export default function AddUserModal({ onClose, onCreate, user }) {
       maxWidth="max-w-[520px]"
       footer={
         <div className="flex justify-center gap-3 w-full">
-          <button onClick={onClose} className="btn-ghost py-3 px-7 text-sm font-semibold">
+          <button
+            onClick={onClose}
+            className="btn-ghost py-3 px-7 text-sm font-semibold"
+            type="button"
+          >
             Cancel
           </button>
-          <button onClick={handleCreate} className="btn-primary py-3 px-7 text-sm">
+
+          <button
+            onClick={handleCreate}
+            className="btn-primary py-3 px-7 text-sm"
+            type="button"
+          >
             {isEdit ? 'Save Changes' : 'Create User'}
           </button>
         </div>
       }
     >
-      {/* NAME */}
       <div className="flex flex-col gap-1.5">
         <label className="label-base">Name</label>
         <input
           type="text"
           value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            if (!isEdit) {
-              setAccessKey(generateKey(role, e.target.value));
-            }
-          }}
+          onChange={(e) => setName(e.target.value)}
           className="input-base"
         />
       </div>
 
-      {/* USERNAME */}
       <div className="flex flex-col gap-1.5">
         <label className="label-base">Username</label>
         <input
@@ -90,54 +99,31 @@ export default function AddUserModal({ onClose, onCreate, user }) {
         />
       </div>
 
-      {/* ACCESS KEY */}
       <div className="flex flex-col gap-1.5">
-        <label className="label-base">
-          {isEdit ? 'New Password (optional)' : 'Access Key'}
-        </label>
-
-        <div className="flex items-center gap-1.5">
-          <input
-            type="text"
-            value={accessKey}
-            readOnly={!isEdit}
-            onChange={(e) => setAccessKey(e.target.value)}
-            className="input-base flex-1"
-          />
-
-          {!isEdit && (
-            <>
-              <button onClick={copyKey} className="btn-icon">
-                <Copy size={16} />
-              </button>
-
-              <button
-                onClick={() => setAccessKey(generateKey(role, name))}
-                className="btn-icon"
-              >
-                <RefreshCw size={16} />
-              </button>
-            </>
-          )}
-        </div>
+        <label className="label-base">Password</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="input-base"
+          placeholder={
+            isEdit
+              ? 'Kosongkan jika tidak ingin mengubah password'
+              : 'Minimal 6 karakter'
+          }
+        />
       </div>
 
-      {/* ROLE */}
       <div className="flex flex-col gap-1.5">
         <label className="label-base">Role</label>
         <select
           value={role}
-          onChange={(e) => {
-            setRole(e.target.value);
-            if (!isEdit) {
-              setAccessKey(generateKey(e.target.value, name));
-            }
-          }}
+          onChange={(e) => setRole(e.target.value)}
           className="input-base"
         >
-          <option value="Mechanic">Mechanic</option>
-          <option value="Admin">Admin</option>
-          <option value="Operator">Operator</option>
+          <option value="teknisi">Teknisi</option>
+          <option value="admin">Admin</option>
+          <option value="driver">Driver</option>
         </select>
       </div>
     </ModalShell>

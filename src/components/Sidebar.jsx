@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, AlertTriangle, Calendar, DollarSign, Users, LogOut } from 'lucide-react';
+import { LayoutDashboard, AlertTriangle, Calendar, DollarSign, Users, LogOut, Truck, ClipboardList } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import LogoutModal from './modals/LogoutModal';
 import iconImg from '../assets/Icon.png';
@@ -8,6 +8,8 @@ import iconImg from '../assets/Icon.png';
 const navItems = [
   { label: 'Dashboard', route: '/dashboard', icon: LayoutDashboard },
   { label: 'Damage Reports', route: '/damage-reports', icon: AlertTriangle },
+  { label: 'Vehicles', route: '/vehicles', icon: Truck },
+  { label: 'Vehicle Assignment', route: '/vehicle-assignments', icon: Users },
   { label: 'Maintenance Scheduling', route: '/maintenance-scheduling', icon: Calendar },
   { label: 'Cost Monitoring', route: '/cost-monitoring', icon: DollarSign },
   { label: 'User Management', route: '/user-management', icon: Users },
