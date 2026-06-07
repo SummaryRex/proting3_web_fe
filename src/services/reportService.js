@@ -6,9 +6,6 @@ import api from './api';
  * ===============================
  */
 
-/**
- * Normalize status backend ke label UI admin.
- */
 function normalizeStatus(status) {
   const value = String(status || '')
     .trim()
@@ -22,10 +19,29 @@ function normalizeStatus(status) {
     case 'waiting':
       return 'Reported';
 
+    case 'requested':
+    case 'pending':
+      return 'Requested';
+
+    case 'approved':
+    case 'scheduled':
+      return 'Scheduled';
+
+    case 'rescheduled':
+      return 'Rescheduled';
+
     case 'proses':
     case 'diproses':
     case 'ongoing':
     case 'in_progress':
+    case 'progress':
+    case 'started':
+    case 'start_job':
+    case 'job_started':
+    case 'repair_started':
+    case 'technician_started':
+    case 'working':
+    case 'on_progress':
       return 'In Progress';
 
     case 'butuh_followup_admin':
@@ -44,6 +60,17 @@ function normalizeStatus(status) {
     case 'complete':
       return 'Completed';
 
+    case 'cancel':
+    case 'canceled':
+    case 'cancelled':
+    case 'dibatalkan':
+      return 'Canceled';
+
+    case 'reject':
+    case 'rejected':
+    case 'ditolak':
+      return 'Rejected';
+
     case 'fatal':
       return 'Fatal';
 
@@ -52,9 +79,6 @@ function normalizeStatus(status) {
   }
 }
 
-/**
- * Ambil response teknisi terbaru.
- */
 function getLatestTechnicianResponse(report) {
   if (report?.latest_technician_response) {
     return report.latest_technician_response;
@@ -67,21 +91,71 @@ function getLatestTechnicianResponse(report) {
   return null;
 }
 
-/**
- * Ambil status asli dari report.
- */
+function getLatestServiceBooking(report) {
+  if (report?.latest_service_booking) {
+    return report.latest_service_booking;
+  }
+
+  if (report?.service_booking) {
+    return report.service_booking;
+  }
+
+  if (report?.booking) {
+    return report.booking;
+  }
+
+  if (Array.isArray(report?.service_bookings) && report.service_bookings.length > 0) {
+    return report.service_bookings[report.service_bookings.length - 1];
+  }
+
+  if (Array.isArray(report?.bookings) && report.bookings.length > 0) {
+    return report.bookings[report.bookings.length - 1];
+  }
+
+  return null;
+}
+
+function getRawBookingStatus(report) {
+  const booking = getLatestServiceBooking(report);
+
+  return (
+    booking?.status ||
+    report?.booking_status ||
+    report?.service_booking_status ||
+    null
+  );
+}
+
 function getRawReportStatus(report) {
+  const bookingStatus = getRawBookingStatus(report);
+
+  const normalizedBookingStatus = String(bookingStatus || '')
+    .trim()
+    .toLowerCase()
+    .replaceAll(' ', '_')
+    .replaceAll('-', '_');
+
+  if (
+    normalizedBookingStatus === 'cancel' ||
+    normalizedBookingStatus === 'canceled' ||
+    normalizedBookingStatus === 'cancelled' ||
+    normalizedBookingStatus === 'dibatalkan' ||
+    normalizedBookingStatus === 'reject' ||
+    normalizedBookingStatus === 'rejected' ||
+    normalizedBookingStatus === 'ditolak'
+  ) {
+    return bookingStatus;
+  }
+
   return (
     report?.computed_status ||
     report?.latest_technician_response?.status ||
+    bookingStatus ||
     report?.status ||
     'menunggu'
   );
 }
 
-/**
- * Ambil path gambar dari berbagai kemungkinan field backend.
- */
 function getDamageImage(report) {
   return (
     report?.image ||
@@ -94,13 +168,77 @@ function getDamageImage(report) {
   );
 }
 
-/**
- * Normalize item damage report agar UI admin lebih mudah pakai.
- */
+function getSpareParts(report, latest) {
+  const possibleSources = [
+    report?.spare_parts,
+    report?.spareParts,
+    report?.requested_spare_parts,
+    report?.requestedSpareParts,
+    report?.parts,
+    report?.repair_parts,
+    latest?.spare_parts,
+    latest?.spareParts,
+    latest?.requested_spare_parts,
+    latest?.requestedSpareParts,
+    latest?.parts,
+  ];
+
+  const source = possibleSources.find((item) => Array.isArray(item));
+
+  if (!source) return [];
+
+  return source.map((part) => ({
+    id: part?.id,
+
+    name:
+      part?.name ||
+      part?.part_name ||
+      part?.spare_part_name ||
+      part?.item_name ||
+      part?.spare_part?.name ||
+      part?.part?.name ||
+      'Unknown Part',
+
+    part:
+      part?.part_code ||
+      part?.spare_part_code ||
+      part?.code ||
+      part?.part ||
+      part?.spare_part?.code ||
+      part?.part?.code ||
+      '-',
+
+    code:
+      part?.part_code ||
+      part?.spare_part_code ||
+      part?.code ||
+      part?.spare_part?.code ||
+      part?.part?.code ||
+      '-',
+
+    quantity:
+      part?.quantity ||
+      part?.qty ||
+      part?.jumlah ||
+      1,
+
+    status:
+      part?.status ||
+      part?.approval_status ||
+      part?.pivot?.status ||
+      'pending',
+
+    raw: part,
+  }));
+}
+
 export function normalizeDamageReport(report) {
   const latest = getLatestTechnicianResponse(report);
+  const booking = getLatestServiceBooking(report);
+  const rawBookingStatus = getRawBookingStatus(report);
   const rawStatus = getRawReportStatus(report);
   const image = getDamageImage(report);
+  const spareParts = getSpareParts(report, latest);
 
   return {
     id: report?.id,
@@ -159,8 +297,17 @@ export function normalizeDamageReport(report) {
       report?.created_at ||
       '-',
 
+    submitDate:
+      report?.created_at ||
+      '-',
+
     rawStatus,
     status: normalizeStatus(rawStatus),
+
+    booking,
+    serviceBooking: booking,
+    rawBookingStatus,
+    bookingStatus: normalizeStatus(rawBookingStatus),
 
     technicianName:
       latest?.technician?.username ||
@@ -172,9 +319,38 @@ export function normalizeDamageReport(report) {
       latest?.response_note ||
       '-',
 
-    mttr: latest?.mttr ?? null,
-    mtbf: latest?.mtbf ?? null,
-    ma: latest?.ma ?? null,
+    spareParts,
+
+    equipType:
+      report?.vehicle?.type ||
+      report?.vehicle?.vehicle_type ||
+      report?.type ||
+      '-',
+
+    hourMeter:
+      report?.vehicle?.hour_meter ||
+      report?.hour_meter ||
+      '-',
+
+    severity:
+      report?.severity ||
+      report?.severity_level ||
+      '-',
+
+    mttr:
+      latest?.mttr ??
+      report?.mttr ??
+      null,
+
+    mtbf:
+      latest?.mtbf ??
+      report?.mtbf ??
+      null,
+
+    ma:
+      latest?.ma ??
+      report?.ma ??
+      null,
 
     repairHistorySaved:
       report?.repair_history_saved ?? false,
@@ -189,12 +365,6 @@ export function normalizeDamageReport(report) {
   };
 }
 
-/**
- * Normalize response list dari Laravel:
- * - bisa langsung array
- * - bisa { data: [...] }
- * - bisa pagination { data: { data: [...] } }
- */
 function normalizeListResponse(data) {
   const raw = Array.isArray(data)
     ? data
@@ -207,10 +377,6 @@ function normalizeListResponse(data) {
   return raw.map(normalizeDamageReport);
 }
 
-/**
- * Get all damage reports (admin)
- * GET /admin/damage-reports
- */
 export async function getReports(filters = {}) {
   try {
     const { data } = await api.get('/admin/damage-reports', {
@@ -226,10 +392,6 @@ export async function getReports(filters = {}) {
   }
 }
 
-/**
- * Get report detail by ID
- * GET /admin/damage-reports/{id}
- */
 export async function getReportById(id) {
   try {
     const { data } = await api.get(`/admin/damage-reports/${id}`);
@@ -245,10 +407,6 @@ export async function getReportById(id) {
   }
 }
 
-/**
- * Mark report as completed / approve follow-up
- * POST /admin/damage-reports/{id}/complete
- */
 export async function approveReport(id, adminNote = '') {
   try {
     const { data } = await api.post(
@@ -265,10 +423,6 @@ export async function approveReport(id, adminNote = '') {
   }
 }
 
-/**
- * Approve follow-up alias endpoint baru.
- * POST /admin/damage-reports/{id}/approve-follow-up
- */
 export async function approveFollowUp(id, adminNote = '') {
   try {
     const { data } = await api.post(
@@ -285,14 +439,6 @@ export async function approveFollowUp(id, adminNote = '') {
   }
 }
 
-/**
- * Reject report
- * POST /admin/damage-reports/{id}/reject
- *
- * Catatan:
- * Pastikan route backend /reject memang tersedia.
- * Kalau belum ada, function ini akan tetap error 404 dari backend.
- */
 export async function rejectReport(id, reason = '') {
   try {
     const { data } = await api.post(
@@ -309,10 +455,6 @@ export async function rejectReport(id, reason = '') {
   }
 }
 
-/**
- * Get latest reports for dashboard
- * GET /admin/damage-reports?limit=5
- */
 export async function getLatestReports() {
   try {
     const { data } = await api.get('/admin/damage-reports', {
@@ -326,10 +468,6 @@ export async function getLatestReports() {
   }
 }
 
-/**
- * Get follow-up reports
- * GET /admin/damage-reports/follow-ups/list
- */
 export async function getFollowUpReports() {
   try {
     const { data } = await api.get('/admin/damage-reports/follow-ups/list');
@@ -341,12 +479,6 @@ export async function getFollowUpReports() {
   }
 }
 
-/**
- * Get finished repair reports from technician
- * GET /admin/damage-reports/finished-repairs
- *
- * Data ini berasal dari technician_responses status=selesai.
- */
 export async function getFinishedRepairReports() {
   try {
     const { data } = await api.get('/admin/damage-reports/finished-repairs');
@@ -358,12 +490,6 @@ export async function getFinishedRepairReports() {
   }
 }
 
-/**
- * Store finished repair history to admin repairs table
- * POST /admin/damage-reports/{id}/store-finished-repair
- *
- * Dipakai setelah teknisi update status Finished/selesai.
- */
 export async function storeFinishedRepairHistory(id, payload = {}) {
   try {
     const { data } = await api.post(

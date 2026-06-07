@@ -14,7 +14,7 @@ import {
   approveBooking,
   rescheduleBooking,
   cancelBooking,
-} from '../services/maintenanceService';
+} from '../services/scheduleService';
 
 const reportColumns = [
   { label: 'Equipment Name' },
@@ -60,6 +60,7 @@ const priorityLabels = {
 
 const activeScheduleStatuses = [
   'approved',
+  'scheduled',
   'rescheduled',
   'in_progress',
   'completed',
@@ -67,18 +68,23 @@ const activeScheduleStatuses = [
   'cancelled',
 ];
 
-const editableStatuses = ['approved', 'rescheduled'];
-const cancelableStatuses = ['approved', 'rescheduled', 'requested'];
+const editableStatuses = ['approved', 'scheduled', 'rescheduled'];
+const cancelableStatuses = ['approved', 'scheduled', 'rescheduled', 'requested'];
 
 function normalizeStatus(value) {
   if (!value) return 'requested';
 
-  const status = String(value).toLowerCase().trim();
+  const status = String(value)
+    .toLowerCase()
+    .trim()
+    .replaceAll(' ', '_')
+    .replaceAll('-', '_');
 
   if (status === 'scheduled') return 'approved';
   if (status === 'finished') return 'completed';
   if (status === 'selesai') return 'completed';
   if (status === 'cancelled') return 'canceled';
+  if (status === 'dibatalkan') return 'canceled';
   if (status === 'pending') return 'requested';
 
   return status;
@@ -138,7 +144,6 @@ function getDamageReportFromBooking(booking) {
 function getTechnicianFromBooking(booking) {
   return (
     booking?.technician ||
-    booking?.mechanic ||
     booking?.assigned_technician ||
     booking?.assignedTechnician ||
     {}
@@ -173,6 +178,8 @@ function getMechanicNameFromBooking(booking) {
     technician?.name ||
     latest?.technician?.username ||
     latest?.technician?.name ||
+    booking?.technician_name ||
+    booking?.mechanic_name ||
     extractMechanicFromNote(booking?.note_admin) ||
     '-'
   );
@@ -189,7 +196,13 @@ function getMechanicIdFromValue(value) {
   }
 
   if (typeof value === 'object') {
-    const rawId = value.id || value.user_id || value.technician_id;
+    const rawId =
+      value.id ||
+      value.user_id ||
+      value.technician_id ||
+      value.mechanic_id ||
+      value.user?.id;
+
     const parsed = Number(rawId);
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -205,7 +218,15 @@ function getMechanicNameFromValue(value) {
   if (typeof value === 'number') return String(value);
 
   if (typeof value === 'object') {
-    return value.username || value.name || value.label || String(value.id || '-');
+    return (
+      value.username ||
+      value.name ||
+      value.label ||
+      value.full_name ||
+      value.user?.username ||
+      value.user?.name ||
+      String(value.id || '-')
+    );
   }
 
   return '-';
@@ -269,6 +290,7 @@ function normalizeBookingToSchedule(booking) {
   const vehicle = getVehicleFromBooking(booking);
   const driver = getDriverFromBooking(booking);
   const report = getDamageReportFromBooking(booking);
+  const technician = getTechnicianFromBooking(booking);
 
   const scheduledDate =
     booking?.scheduled_at ||
@@ -277,6 +299,16 @@ function normalizeBookingToSchedule(booking) {
     booking?.created_at;
 
   const status = normalizeStatus(booking?.status || 'approved');
+
+  const technicianId =
+    booking?.technician_id ||
+    booking?.mechanic_id ||
+    technician?.id ||
+    technician?.user_id ||
+    technician?.technician_id ||
+    null;
+
+  const technicianName = getMechanicNameFromBooking(booking);
 
   return {
     id: booking?.id ? `MS-${booking.id}` : '-',
@@ -299,7 +331,10 @@ function normalizeBookingToSchedule(booking) {
       driver?.name ||
       '-',
 
-    mechanic: getMechanicNameFromBooking(booking),
+    technician_id: technicianId,
+    mechanic_id: technicianId,
+    technician_name: technicianName,
+    mechanic: technicianName,
 
     date: formatDate(scheduledDate),
     dateVal: booking?.scheduled_at || scheduledDate || '',
@@ -352,9 +387,11 @@ export default function MaintenanceScheduling() {
 
   const stats = useMemo(() => {
     const requested = requestedRows.length;
+
     const active = schedules.filter((x) =>
       ['approved', 'rescheduled', 'in_progress'].includes(x.status)
     ).length;
+
     const completed = schedules.filter((x) => x.status === 'completed').length;
     const canceled = schedules.filter((x) => x.status === 'canceled').length;
 
@@ -372,13 +409,15 @@ export default function MaintenanceScheduling() {
 
       const bookings = await getApprovedReports();
 
-      const rows = bookings
+      console.log('REQUESTED API:', bookings);
+
+      const rows = (Array.isArray(bookings) ? bookings : [])
         .filter((booking) => normalizeStatus(booking?.status) === 'requested')
         .map(normalizeBookingToReport);
 
       setRequestedRows(rows);
     } catch (error) {
-      console.error('LOAD REQUESTED BOOKINGS ERROR:', error);
+      console.error('LOAD REQUEST ERROR:', error);
       setRequestedRows([]);
     } finally {
       setIsLoadingReports(false);
@@ -391,7 +430,9 @@ export default function MaintenanceScheduling() {
 
       const bookings = await getSchedules();
 
-      const rows = bookings
+      console.log('SCHEDULE API:', bookings);
+
+      const rows = (Array.isArray(bookings) ? bookings : [])
         .filter((booking) =>
           activeScheduleStatuses.includes(normalizeStatus(booking?.status))
         )
@@ -399,7 +440,7 @@ export default function MaintenanceScheduling() {
 
       setSchedules(rows);
     } catch (error) {
-      console.error('LOAD SCHEDULES ERROR:', error);
+      console.error('LOAD SCHEDULE ERROR:', error);
       setSchedules([]);
     } finally {
       setIsLoadingSchedules(false);
@@ -415,6 +456,7 @@ export default function MaintenanceScheduling() {
 
   useEffect(() => {
     refreshAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openScheduleModal = (report) => {
@@ -423,41 +465,63 @@ export default function MaintenanceScheduling() {
     setShowSchedule(true);
   };
 
-  const confirmSchedule = async ({ mechanic, date, priority, notes, estimatedFinishAt }) => {
+  const confirmSchedule = async (scheduleData) => {
     if (!selectedReport) return;
 
     try {
       setIsSubmitting(true);
 
+      console.log('SCHEDULE DATA FROM MODAL:', scheduleData);
+
       if (!selectedReport.bookingId) {
-        alert(
-          'Data ini belum memiliki booking service. Driver perlu membuat booking terlebih dahulu sebelum admin menjadwalkan.'
-        );
+        alert('Booking ID tidak ditemukan.');
         return;
       }
 
-      if (!date) {
-        alert('Tanggal jadwal wajib diisi.');
+      const technicianId =
+        scheduleData?.technician_id ||
+        scheduleData?.mechanic_id ||
+        scheduleData?.technician?.id ||
+        scheduleData?.mechanic?.id ||
+        getMechanicIdFromValue(scheduleData?.technician) ||
+        getMechanicIdFromValue(scheduleData?.mechanic);
+
+      if (!technicianId) {
+        alert('Technician wajib dipilih.');
         return;
       }
 
-      const technicianId = getMechanicIdFromValue(mechanic);
+      const scheduledAt =
+        scheduleData?.scheduled_at ||
+        scheduleData?.date ||
+        scheduleData?.dateVal;
+
+      if (!scheduledAt) {
+        alert('Tanggal schedule wajib diisi.');
+        return;
+      }
+
+      const mechanicName =
+        scheduleData?.technician_name ||
+        getMechanicNameFromValue(scheduleData?.technician) ||
+        getMechanicNameFromValue(scheduleData?.mechanic);
 
       const payload = {
-        scheduled_at: date,
-        estimated_finish_at: estimatedFinishAt || undefined,
-        priority: priority || 'medium',
-        mechanic,
+        scheduled_at: scheduledAt,
+        estimated_finish_at:
+          scheduleData?.estimated_finish_at ||
+          scheduleData?.estimatedFinishAt ||
+          null,
+        priority: scheduleData?.priority || 'medium',
+        technician_id: Number(technicianId),
         note_admin: buildAdminNote({
-          mechanic,
-          priority,
-          notes,
+          mechanic: mechanicName,
+          priority: scheduleData?.priority,
+          notes: scheduleData?.notes,
         }),
       };
 
-      if (technicianId) {
-        payload.technician_id = technicianId;
-      }
+      console.log('APPROVE BOOKING PAYLOAD:', payload);
 
       await approveBooking(selectedReport.bookingId, payload);
 
@@ -466,12 +530,15 @@ export default function MaintenanceScheduling() {
       setSchedEquip('');
 
       await refreshAll();
+
+      alert('Schedule maintenance berhasil dibuat.');
     } catch (error) {
       console.error('CONFIRM SCHEDULE ERROR:', error);
+
       alert(
         error?.response?.data?.message ||
           error?.message ||
-          'Gagal membuat jadwal maintenance.'
+          'Gagal membuat schedule maintenance.'
       );
     } finally {
       setIsSubmitting(false);
@@ -490,47 +557,84 @@ export default function MaintenanceScheduling() {
     try {
       setIsSubmitting(true);
 
-      if (!updated.bookingId) {
-        alert('ID booking tidak valid.');
+      console.log('EDIT DATA FROM MODAL:', updated);
+
+      if (!updated?.bookingId) {
+        alert('Booking ID tidak valid.');
         return;
       }
 
-      if (!updated.dateVal) {
-        alert('Tanggal jadwal wajib diisi.');
+      if (updated?.status === 'cancelled' || updated?.status === 'canceled') {
+        await cancelBooking(updated.bookingId, {
+          note_admin:
+            updated.noteAdmin ||
+            `Schedule untuk ${updated.equip || 'unit'} dibatalkan admin.`,
+        });
+
+        setEditData(null);
+        await refreshAll();
+
+        alert('Schedule berhasil dibatalkan.');
         return;
       }
 
-      const technicianId = getMechanicIdFromValue(updated.mechanic);
+      if (!updated?.dateVal) {
+        alert('Tanggal schedule wajib diisi.');
+        return;
+      }
+
+      const technicianId =
+        updated?.technician_id ||
+        updated?.mechanic_id ||
+        updated?.raw?.technician_id ||
+        updated?.raw?.mechanic_id ||
+        updated?.raw?.technician?.id ||
+        updated?.raw?.mechanic?.id ||
+        getMechanicIdFromValue(updated?.technician) ||
+        getMechanicIdFromValue(updated?.mechanic);
+
+      if (!technicianId) {
+        alert('Technician ID tidak ditemukan. Data schedule tidak valid.');
+        return;
+      }
+
+      const mechanicName =
+        updated?.technician_name ||
+        updated?.mechanic_name ||
+        getMechanicNameFromValue(updated?.technician) ||
+        getMechanicNameFromValue(updated?.mechanic) ||
+        getMechanicNameFromBooking(updated?.raw);
 
       const payload = {
         scheduled_at: updated.dateVal,
-        estimated_finish_at: updated.estimatedFinishAt || undefined,
+        estimated_finish_at: updated.estimatedFinishAt || null,
         priority: updated.priority || 'medium',
-        mechanic: updated.mechanic,
+        technician_id: Number(technicianId),
         note_admin:
-          updated.noteAdmin && updated.noteAdmin.trim()
-            ? updated.noteAdmin
-            : buildAdminNote({
-                mechanic: updated.mechanic,
-                priority: updated.priority,
-                notes: '',
-              }),
+          updated.noteAdmin?.trim() ||
+          buildAdminNote({
+            mechanic: mechanicName,
+            priority: updated.priority,
+            notes: '',
+          }),
       };
 
-      if (technicianId) {
-        payload.technician_id = technicianId;
-      }
+      console.log('RESCHEDULE PAYLOAD:', payload);
 
       await rescheduleBooking(updated.bookingId, payload);
 
       setEditData(null);
+
       await refreshAll();
+
+      alert('Schedule berhasil diperbarui.');
     } catch (error) {
-      console.error('SAVE EDIT SCHEDULE ERROR:', error);
+      console.error('SAVE EDIT ERROR:', error);
+
       alert(
         error?.response?.data?.message ||
           error?.message ||
-          'Gagal mengubah jadwal maintenance.'
+          'Gagal update schedule.'
       );
     } finally {
       setIsSubmitting(false);
@@ -559,6 +663,7 @@ export default function MaintenanceScheduling() {
       await refreshAll();
     } catch (error) {
       console.error('CANCEL SCHEDULE ERROR:', error);
+
       alert(
         error?.response?.data?.message ||
           error?.message ||
@@ -789,7 +894,7 @@ export default function MaintenanceScheduling() {
                       className="btn-icon"
                       title={
                         isEditDisabled
-                          ? 'Hanya jadwal approved/rescheduled yang bisa diedit'
+                          ? 'Hanya jadwal scheduled/rescheduled yang bisa diedit'
                           : 'Edit'
                       }
                       disabled={isEditDisabled}
@@ -833,6 +938,7 @@ export default function MaintenanceScheduling() {
       {showSchedule && (
         <ScheduleModal
           equipName={schedEquip}
+          existingSchedules={schedules}
           onClose={() => {
             setShowSchedule(false);
             setSelectedReport(null);

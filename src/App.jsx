@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -14,19 +14,21 @@ import MaintenanceScheduling from "./pages/MaintenanceScheduling";
 import UserManagement from "./pages/UserManagement";
 import CostMonitoring from "./pages/CostMonitoring";
 
-// ✅ VEHICLES
+// VEHICLES
 import VehiclesPage from "./pages/VehiclesPage";
 
-// ✅ VEHICLE ASSIGNMENT
+// VEHICLE ASSIGNMENT
 import VehicleAssignmentsPage from "./pages/VehicleAssignmentsPage";
+
+// ADMIN INVENTORY / FINANCE
+import InventoryPage from "./pages/InventoryPage";
+import FinanceTransactionsPage from "./pages/FinanceTransactionsPage";
 
 // OPTIONAL 404
 function NotFound() {
   return (
     <div className="flex items-center justify-center h-screen bg-[#121212] text-white">
-      <h1 className="text-2xl font-bold">
-        404 - Page Not Found
-      </h1>
+      <h1 className="text-2xl font-bold">404 - Page Not Found</h1>
     </div>
   );
 }
@@ -36,7 +38,6 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-
           {/* =========================
               PUBLIC ROUTES
           ========================= */}
@@ -44,10 +45,9 @@ function App() {
           <Route path="/login" element={<Login />} />
 
           {/* =========================
-              PROTECTED ROUTES
+              PROTECTED ROUTES - ADMIN
           ========================= */}
 
-          {/* DASHBOARD */}
           <Route
             path="/dashboard"
             element={
@@ -57,7 +57,6 @@ function App() {
             }
           />
 
-          {/* DAMAGE REPORT */}
           <Route
             path="/damage-reports"
             element={
@@ -67,7 +66,6 @@ function App() {
             }
           />
 
-          {/* ✅ VEHICLES */}
           <Route
             path="/vehicles"
             element={
@@ -77,7 +75,6 @@ function App() {
             }
           />
 
-          {/* ✅ VEHICLE ASSIGNMENT */}
           <Route
             path="/vehicle-assignments"
             element={
@@ -87,7 +84,6 @@ function App() {
             }
           />
 
-          {/* MAINTENANCE */}
           <Route
             path="/maintenance-scheduling"
             element={
@@ -97,7 +93,6 @@ function App() {
             }
           />
 
-          {/* USER MANAGEMENT */}
           <Route
             path="/user-management"
             element={
@@ -107,7 +102,6 @@ function App() {
             }
           />
 
-          {/* COST MONITORING */}
           <Route
             path="/cost-monitoring"
             element={
@@ -118,10 +112,57 @@ function App() {
           />
 
           {/* =========================
+              INVENTORY
+              Approval sparepart cukup di InventoryPage
+          ========================= */}
+          <Route
+            path="/inventory"
+            element={
+              <ProtectedRoute>
+                <InventoryPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* 
+            Route lama /part-requests tidak lagi membuka page sendiri.
+            Ini dibuat redirect supaya tidak error kalau masih ada link lama.
+          */}
+          <Route
+            path="/part-requests"
+            element={
+              <ProtectedRoute>
+                <Navigate to="/inventory" replace />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/finance-transactions"
+            element={
+              <ProtectedRoute>
+                <FinanceTransactionsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* 
+            Cost estimate sudah dihapus dari flow.
+            Kalau ada akses lama ke /cost-estimates, arahkan ke cost monitoring.
+          */}
+          <Route
+            path="/cost-estimates"
+            element={
+              <ProtectedRoute>
+                <Navigate to="/cost-monitoring" replace />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =========================
               FALLBACK ROUTE
           ========================= */}
           <Route path="*" element={<NotFound />} />
-
         </Routes>
       </BrowserRouter>
     </AuthProvider>

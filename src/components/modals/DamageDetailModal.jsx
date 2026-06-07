@@ -3,6 +3,14 @@ import StatusBadge from '../ui/StatusBadge';
 
 const API_STORAGE_URL = 'http://127.0.0.1:8000/storage';
 
+function normalizeStatusValue(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replaceAll(' ', '_')
+    .replaceAll('-', '_');
+}
+
 function formatDate(value) {
   if (!value || value === '-') return '-';
 
@@ -26,7 +34,12 @@ function formatDate(value) {
 }
 
 function formatKpi(value, suffix = '') {
-  if (value === null || value === undefined || value === '' || value === 'null') {
+  if (
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    value === 'null'
+  ) {
     return '-';
   }
 
@@ -40,10 +53,12 @@ function formatKpi(value, suffix = '') {
 }
 
 function hasKpi(data) {
-  return (
-    data?.mttr !== null ||
-    data?.mtbf !== null ||
-    data?.ma !== null
+  return [data?.mttr, data?.mtbf, data?.ma].some(
+    (value) =>
+      value !== null &&
+      value !== undefined &&
+      value !== '' &&
+      value !== 'null'
   );
 }
 
@@ -85,12 +100,111 @@ function getImageUrl(path) {
   return `${API_STORAGE_URL}/${cleanPath}`;
 }
 
+function isCompletedStatus(data, status) {
+  const values = [
+    status,
+    data?.rawStatus,
+    data?.raw?.status,
+    data?.raw?.computed_status,
+    data?.raw?.latest_technician_response?.status,
+  ].map(normalizeStatusValue);
+
+  return values.some((value) =>
+    ['selesai', 'finished', 'completed', 'complete'].includes(value)
+  );
+}
+
+function isWaitingPartsStatus(data, status) {
+  const values = [
+    status,
+    data?.rawStatus,
+    data?.raw?.status,
+    data?.raw?.computed_status,
+    data?.raw?.latest_technician_response?.status,
+  ].map(normalizeStatusValue);
+
+  return values.some((value) =>
+    [
+      'waiting_parts',
+      'on_hold',
+      'butuh_followup_admin',
+      'butuh_followup',
+      'menunggu_sparepart',
+    ].includes(value)
+  );
+}
+
+function isStartedOrInProgressStatus(data, status) {
+  const values = [
+    status,
+    data?.rawStatus,
+    data?.bookingStatus,
+    data?.rawBookingStatus,
+    data?.raw?.status,
+    data?.raw?.computed_status,
+    data?.raw?.booking_status,
+    data?.raw?.service_booking_status,
+    data?.raw?.latest_service_booking?.status,
+    data?.raw?.service_booking?.status,
+    data?.raw?.booking?.status,
+    data?.raw?.latest_technician_response?.status,
+  ].map(normalizeStatusValue);
+
+  return values.some((value) =>
+    [
+      'proses',
+      'diproses',
+      'ongoing',
+      'in_progress',
+      'progress',
+      'started',
+      'start_job',
+      'job_started',
+      'repair_started',
+      'technician_started',
+      'working',
+      'on_progress',
+      'butuh_followup_admin',
+      'butuh_followup',
+      'waiting_parts',
+      'menunggu_sparepart',
+      'on_hold',
+    ].includes(value)
+  );
+}
+
+function isCanceledOrRejected(data, status) {
+  const values = [
+    status,
+    data?.rawStatus,
+    data?.bookingStatus,
+    data?.rawBookingStatus,
+    data?.raw?.status,
+    data?.raw?.booking_status,
+    data?.raw?.service_booking_status,
+    data?.raw?.latest_service_booking?.status,
+    data?.raw?.service_booking?.status,
+    data?.raw?.booking?.status,
+  ].map(normalizeStatusValue);
+
+  return values.some((value) =>
+    [
+      'cancel',
+      'canceled',
+      'cancelled',
+      'dibatalkan',
+      'reject',
+      'rejected',
+      'ditolak',
+    ].includes(value)
+  );
+}
+
 export default function DamageDetailModal({
   data,
   onClose,
   onApprove,
   onReject,
-  onStoreFinishedRepair,
 }) {
   if (!data) return null;
 
@@ -134,13 +248,17 @@ export default function DamageDetailModal({
   const technicianName =
     data.technicianName ||
     data.latestTechnicianResponse?.technician?.username ||
+    data.latestTechnicianResponse?.technician?.name ||
     data.raw?.latest_technician_response?.technician?.username ||
+    data.raw?.latest_technician_response?.technician?.name ||
     '-';
 
   const technicianNote =
     data.technicianNote ||
     data.latestTechnicianResponse?.note ||
+    data.latestTechnicianResponse?.response_note ||
     data.raw?.latest_technician_response?.note ||
+    data.raw?.latest_technician_response?.response_note ||
     '-';
 
   const submitDate =
@@ -159,17 +277,10 @@ export default function DamageDetailModal({
   const imagePath = getImagePath(data);
   const imageUrl = getImageUrl(imagePath);
 
-  const isCompleted =
-    status === 'Completed' ||
-    status === 'Finished' ||
-    data.rawStatus === 'selesai' ||
-    data.raw?.computed_status === 'selesai';
-
-  const isWaitingParts =
-    status === 'Waiting Parts' ||
-    status === 'On Hold' ||
-    data.rawStatus === 'butuh_followup_admin' ||
-    data.raw?.computed_status === 'butuh_followup_admin';
+  const isCompleted = isCompletedStatus(data, status);
+  const isWaitingParts = isWaitingPartsStatus(data, status);
+  const isCanceledRejected = isCanceledOrRejected(data, status);
+  const isStartedOrInProgress = isStartedOrInProgressStatus(data, status);
 
   return (
     <div
@@ -177,7 +288,6 @@ export default function DamageDetailModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="bg-djati-panel border border-djati-border-amber rounded-2xl w-full max-w-[880px] max-h-[90vh] flex flex-col shadow-modal">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-djati-border">
           <div>
             <h2 className="text-lg font-extrabold text-white">
@@ -196,9 +306,7 @@ export default function DamageDetailModal({
           </button>
         </div>
 
-        {/* Body */}
         <div className="grid grid-cols-2 overflow-y-auto flex-1">
-          {/* Left column */}
           <div className="p-6 border-r border-djati-border">
             <div className="mb-6">
               <h4 className="text-[0.68rem] font-bold tracking-wider text-[#ff9800] uppercase mb-3">
@@ -271,7 +379,7 @@ export default function DamageDetailModal({
                 {spareParts.length > 0 ? (
                   spareParts.map((p, index) => (
                     <div
-                      key={p.part || p.id || index}
+                      key={p.id || p.part || p.code || index}
                       className="flex items-center justify-between bg-white/[0.03] border border-djati-border rounded-[10px] px-4 py-3"
                     >
                       <div>
@@ -297,7 +405,6 @@ export default function DamageDetailModal({
             </div>
           </div>
 
-          {/* Right column */}
           <div className="p-6">
             <div className="mb-6">
               <h4 className="text-[0.68rem] font-bold tracking-wider text-[#ff9800] uppercase mb-3">
@@ -308,8 +415,22 @@ export default function DamageDetailModal({
                 {[
                   { label: 'EQUIPMENT NAME', value: equipmentName },
                   { label: 'PLATE NUMBER', value: plateNumber },
-                  { label: 'TYPE', value: data.equipType || data.raw?.vehicle?.type || '-' },
-                  { label: 'HOUR METER', value: data.hourMeter || data.raw?.vehicle?.hour_meter || '-' },
+                  {
+                    label: 'TYPE',
+                    value:
+                      data.equipType ||
+                      data.raw?.vehicle?.type ||
+                      data.raw?.vehicle?.vehicle_type ||
+                      '-',
+                  },
+                  {
+                    label: 'HOUR METER',
+                    value:
+                      data.hourMeter ||
+                      data.raw?.vehicle?.hour_meter ||
+                      data.raw?.hour_meter ||
+                      '-',
+                  },
                 ].map((f) => (
                   <div key={f.label}>
                     <small className="block text-[0.62rem] font-semibold tracking-wider text-djati-muted uppercase mb-1">
@@ -355,19 +476,41 @@ export default function DamageDetailModal({
 
               <div>
                 {[
-                  { label: 'Submission Date', value: formatDate(submitDate), className: '' },
-                  { label: 'Severity Level', value: data.severity || '-', className: String(data.severity || '').includes('Critical') ? 'text-status-critical' : 'text-djati-amber' },
-                  { label: 'Report Status', value: status, className: 'text-djati-amber' },
-                  { label: 'Image Path', value: imagePath || '-', className: 'text-djati-muted' },
+                  {
+                    label: 'Submission Date',
+                    value: formatDate(submitDate),
+                    className: '',
+                  },
+                  {
+                    label: 'Severity Level',
+                    value: data.severity || '-',
+                    className: String(data.severity || '').includes('Critical')
+                      ? 'text-status-critical'
+                      : 'text-djati-amber',
+                  },
+                  {
+                    label: 'Report Status',
+                    value: status,
+                    className: 'text-djati-amber',
+                  },
+                  {
+                    label: 'Image Path',
+                    value: imagePath || '-',
+                    className: 'text-djati-muted',
+                  },
                 ].map((row, i, arr) => (
                   <div
                     key={row.label}
-                    className={`flex items-center justify-between gap-4 py-3 ${i < arr.length - 1 ? 'border-b border-white/[0.04]' : ''}`}
+                    className={`flex items-center justify-between gap-4 py-3 ${
+                      i < arr.length - 1 ? 'border-b border-white/[0.04]' : ''
+                    }`}
                   >
                     <span className="text-[0.82rem] text-djati-muted">
                       {row.label}
                     </span>
-                    <strong className={`text-[0.82rem] font-semibold text-djati-text-bright text-right break-all ${row.className}`}>
+                    <strong
+                      className={`text-[0.82rem] font-semibold text-djati-text-bright text-right break-all ${row.className}`}
+                    >
                       {row.value}
                     </strong>
                   </div>
@@ -389,7 +532,9 @@ export default function DamageDetailModal({
                   ].map((row, i, arr) => (
                     <div
                       key={row.label}
-                      className={`flex items-center justify-between py-3 ${i < arr.length - 1 ? 'border-b border-white/[0.04]' : ''}`}
+                      className={`flex items-center justify-between py-3 ${
+                        i < arr.length - 1 ? 'border-b border-white/[0.04]' : ''
+                      }`}
                     >
                       <span className="text-[0.82rem] text-djati-muted">
                         {row.label}
@@ -409,18 +554,20 @@ export default function DamageDetailModal({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex gap-4 px-6 py-5 border-t border-djati-border">
-          {onReject && !isCompleted && (
-            <button
-              onClick={() => onReject(reportId)}
-              className="btn-danger-outline flex-1 py-3.5 px-6 text-[0.85rem] font-extrabold tracking-wider uppercase"
-            >
-              REJECT REPORT
-            </button>
-          )}
+          {onReject &&
+            !isCompleted &&
+            !isCanceledRejected &&
+            !isStartedOrInProgress && (
+              <button
+                onClick={() => onReject(reportId)}
+                className="btn-danger-outline flex-1 py-3.5 px-6 text-[0.85rem] font-extrabold tracking-wider uppercase"
+              >
+                REJECT REPORT
+              </button>
+            )}
 
-          {onApprove && isWaitingParts && (
+          {onApprove && isWaitingParts && !isCanceledRejected && (
             <button
               onClick={() => onApprove(reportId)}
               className="btn-primary flex-1 py-3.5 px-6 text-[0.85rem] font-extrabold tracking-wider uppercase !from-[#ff9800] !to-[#f57c00] text-white"
@@ -429,23 +576,12 @@ export default function DamageDetailModal({
             </button>
           )}
 
-          {onStoreFinishedRepair && isCompleted && (
-            <button
-              onClick={() => onStoreFinishedRepair(data)}
-              className="btn-primary flex-1 py-3.5 px-6 text-[0.85rem] font-extrabold tracking-wider uppercase !from-[#ff9800] !to-[#f57c00] text-white"
-            >
-              SAVE TO REPAIR HISTORY
-            </button>
-          )}
-
-          {!onApprove && !onReject && !onStoreFinishedRepair && (
-            <button
-              onClick={onClose}
-              className="btn-primary flex-1 py-3.5 px-6 text-[0.85rem] font-extrabold tracking-wider uppercase !from-[#ff9800] !to-[#f57c00] text-white"
-            >
-              CLOSE
-            </button>
-          )}
+          <button
+            onClick={onClose}
+            className="btn-ghost flex-1 py-3.5 px-6 text-[0.85rem] font-extrabold tracking-wider uppercase"
+          >
+            CLOSE
+          </button>
         </div>
       </div>
     </div>

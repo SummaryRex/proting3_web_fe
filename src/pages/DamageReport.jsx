@@ -8,10 +8,8 @@ import DamageDetailModal from "../components/modals/DamageDetailModal";
 import {
   getReports,
   getReportById,
-  approveReport,
+  approveFollowUp,
   rejectReport,
-  getFinishedRepairReports,
-  storeFinishedRepairHistory,
 } from "../services/reportService";
 
 const tableColumns = [
@@ -32,7 +30,6 @@ const statusFilters = [
   "Waiting Parts",
   "Completed",
   "Fatal",
-  "Finished Repair",
 ];
 
 const API_STORAGE_URL = "http://127.0.0.1:8000/storage";
@@ -52,6 +49,114 @@ function statusToBackendFilter(status) {
     default:
       return "";
   }
+}
+
+function normalizeStatusValue(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll(" ", "_")
+    .replaceAll("-", "_");
+}
+
+function isCompletedReport(report) {
+  const values = [
+    report?.status,
+    report?.rawStatus,
+    report?.raw?.status,
+    report?.raw?.computed_status,
+    report?.raw?.latest_technician_response?.status,
+  ].map(normalizeStatusValue);
+
+  return values.some((value) =>
+    ["selesai", "finished", "completed", "complete"].includes(value)
+  );
+}
+
+function isWaitingPartsReport(report) {
+  const values = [
+    report?.status,
+    report?.rawStatus,
+    report?.raw?.status,
+    report?.raw?.computed_status,
+    report?.raw?.latest_technician_response?.status,
+  ].map(normalizeStatusValue);
+
+  return values.some((value) =>
+    [
+      "waiting_parts",
+      "on_hold",
+      "butuh_followup_admin",
+      "butuh_followup",
+      "menunggu_sparepart",
+    ].includes(value)
+  );
+}
+
+function isStartedOrInProgressReport(report) {
+  const values = [
+    report?.status,
+    report?.rawStatus,
+    report?.bookingStatus,
+    report?.rawBookingStatus,
+    report?.raw?.status,
+    report?.raw?.computed_status,
+    report?.raw?.booking_status,
+    report?.raw?.service_booking_status,
+    report?.raw?.latest_service_booking?.status,
+    report?.raw?.service_booking?.status,
+    report?.raw?.booking?.status,
+    report?.raw?.latest_technician_response?.status,
+  ].map(normalizeStatusValue);
+
+  return values.some((value) =>
+    [
+      "proses",
+      "diproses",
+      "ongoing",
+      "in_progress",
+      "progress",
+      "started",
+      "start_job",
+      "job_started",
+      "repair_started",
+      "technician_started",
+      "working",
+      "on_progress",
+      "butuh_followup_admin",
+      "butuh_followup",
+      "waiting_parts",
+      "menunggu_sparepart",
+      "on_hold",
+    ].includes(value)
+  );
+}
+
+function isCanceledOrRejected(report) {
+  const values = [
+    report?.status,
+    report?.rawStatus,
+    report?.bookingStatus,
+    report?.rawBookingStatus,
+    report?.raw?.status,
+    report?.raw?.booking_status,
+    report?.raw?.service_booking_status,
+    report?.raw?.latest_service_booking?.status,
+    report?.raw?.service_booking?.status,
+    report?.raw?.booking?.status,
+  ].map(normalizeStatusValue);
+
+  return values.some((value) =>
+    [
+      "cancel",
+      "canceled",
+      "cancelled",
+      "dibatalkan",
+      "reject",
+      "rejected",
+      "ditolak",
+    ].includes(value)
+  );
 }
 
 function formatDate(value) {
@@ -103,10 +208,12 @@ function getImageUrl(path) {
 }
 
 function hasKpi(report) {
-  return (
-    report?.mttr !== null ||
-    report?.mtbf !== null ||
-    report?.ma !== null
+  return [report?.mttr, report?.mtbf, report?.ma].some(
+    (value) =>
+      value !== null &&
+      value !== undefined &&
+      value !== "" &&
+      value !== "null"
   );
 }
 
@@ -135,59 +242,26 @@ export default function DamageReport() {
   const [reports, setReports] = useState([]);
   const [modalData, setModalData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [savingId, setSavingId] = useState(null);
 
   const fetchReports = async () => {
     try {
       setIsLoading(true);
 
-      let data = [];
+      const filters = {};
+      const status = statusToBackendFilter(activeFilter);
 
-      if (activeFilter === "Finished Repair") {
-        data = await getFinishedRepairReports();
-      } else {
-        const filters = {};
-
-        const status = statusToBackendFilter(activeFilter);
-
-        if (status) {
-          filters.status = status;
-        }
-
-        if (searchQuery.trim()) {
-          filters.search = searchQuery.trim();
-        }
-
-        data = await getReports(filters);
+      if (status) {
+        filters.status = status;
       }
 
+      if (searchQuery.trim()) {
+        filters.search = searchQuery.trim();
+      }
+
+      const data = await getReports(filters);
       const filteredData = Array.isArray(data) ? data : [];
 
-      if (activeFilter === "Finished Repair" && searchQuery.trim()) {
-        const keyword = searchQuery.trim().toLowerCase();
-
-        setReports(
-          filteredData.filter((item) => {
-            const target = [
-              item.id,
-              item.equipmentName,
-              item.equip,
-              item.driverName,
-              item.operator,
-              item.plateNumber,
-              item.damageType,
-              item.description,
-              item.status,
-            ]
-              .join(" ")
-              .toLowerCase();
-
-            return target.includes(keyword);
-          })
-        );
-      } else {
-        setReports(filteredData);
-      }
+      setReports(filteredData);
     } catch (err) {
       console.error("FETCH REPORTS ERROR:", err);
       setReports([]);
@@ -200,6 +274,15 @@ export default function DamageReport() {
     fetchReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter]);
+
+  useEffect(() => {
+    const delay = setTimeout(() => {
+      fetchReports();
+    }, 300);
+
+    return () => clearTimeout(delay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
 
   const openDetail = async (id) => {
     try {
@@ -214,11 +297,11 @@ export default function DamageReport() {
 
   const handleApprove = async (id) => {
     try {
-      await approveReport(id);
+      await approveFollowUp(id, "Follow-up disetujui oleh admin");
       fetchReports();
     } catch (err) {
-      console.error("APPROVE ERROR:", err);
-      alert(err?.message || "Gagal approve report.");
+      console.error("APPROVE FOLLOW-UP ERROR:", err);
+      alert(err?.message || "Gagal approve follow-up report.");
     }
   };
 
@@ -235,46 +318,9 @@ export default function DamageReport() {
     }
   };
 
-  const handleStoreFinishedRepair = async (report) => {
-    try {
-      setSavingId(report.id);
-
-      const result = await storeFinishedRepairHistory(report.id, {
-        admin_note: "Disimpan dari finished technician repair",
-        action:
-          report.technicianNote ||
-          report.description ||
-          "Repair selesai oleh teknisi",
-        cost: 0,
-      });
-
-      if (!result.success) {
-        alert(result.message || "Gagal menyimpan finished repair history.");
-        return;
-      }
-
-      alert(result.message || "Finished repair history berhasil disimpan.");
-      fetchReports();
-    } catch (err) {
-      console.error("STORE FINISHED REPAIR ERROR:", err);
-      alert(err?.message || "Gagal menyimpan finished repair history.");
-    } finally {
-      setSavingId(null);
-    }
-  };
-
   const handleSearch = (e) => {
     setSearchQuery(e.target.value);
   };
-
-  useEffect(() => {
-    const delay = setTimeout(() => {
-      fetchReports();
-    }, 300);
-
-    return () => clearTimeout(delay);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
 
   return (
     <DashboardLayout title="Damage Reports">
@@ -346,23 +392,17 @@ export default function DamageReport() {
           data={reports}
           className="!rounded-b-none !border-b-0"
           renderRow={(r) => {
-            const isCompleted =
-              r.status === "Completed" ||
-              r.rawStatus === "selesai" ||
-              r.rawStatus === "finished";
-
-            const isWaitingParts =
-              r.status === "Waiting Parts" ||
-              r.rawStatus === "butuh_followup_admin";
+            const isCompleted = isCompletedReport(r);
+            const isWaitingParts = isWaitingPartsReport(r);
+            const isCanceledRejected = isCanceledOrRejected(r);
+            const isStartedOrInProgress = isStartedOrInProgressReport(r);
 
             const imagePath = getImagePath(r);
             const imageUrl = getImageUrl(imagePath);
 
             return (
               <tr key={r.id} className="table-row-hover">
-                <td className="px-4 py-3.5 text-[0.82rem]">
-                  #{r.id}
-                </td>
+                <td className="px-4 py-3.5 text-[0.82rem]">#{r.id}</td>
 
                 <td className="px-4 py-3.5">
                   {imageUrl ? (
@@ -463,7 +503,7 @@ export default function DamageReport() {
                       View Detail
                     </button>
 
-                    {isWaitingParts && (
+                    {isWaitingParts && !isCanceledRejected && (
                       <button
                         onClick={() => handleApprove(r.id)}
                         className="btn-success-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
@@ -472,26 +512,16 @@ export default function DamageReport() {
                       </button>
                     )}
 
-                    {isCompleted && (
-                      <button
-                        onClick={() => handleStoreFinishedRepair(r)}
-                        disabled={savingId === r.id}
-                        className="btn-success-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md disabled:opacity-60"
-                      >
-                        {savingId === r.id
-                          ? "Saving..."
-                          : "Save to Repair History"}
-                      </button>
-                    )}
-
-                    {!isCompleted && (
-                      <button
-                        onClick={() => handleReject(r.id)}
-                        className="btn-danger-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
-                      >
-                        Reject
-                      </button>
-                    )}
+                    {!isCompleted &&
+                      !isCanceledRejected &&
+                      !isStartedOrInProgress && (
+                        <button
+                          onClick={() => handleReject(r.id)}
+                          className="btn-danger-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
+                        >
+                          Reject
+                        </button>
+                      )}
                   </div>
                 </td>
               </tr>
@@ -517,7 +547,6 @@ export default function DamageReport() {
         onClose={closeDetail}
         onApprove={handleApprove}
         onReject={handleReject}
-        onStoreFinishedRepair={handleStoreFinishedRepair}
       />
     </DashboardLayout>
   );
