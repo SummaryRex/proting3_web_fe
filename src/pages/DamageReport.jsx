@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import DashboardLayout from "../components/layouts/DashboardLayout";
+import { useEffect, useMemo, useState } from "react";
+import Sidebar from "../components/Sidebar";
 import DataTable from "../components/ui/DataTable";
 import SearchInput from "../components/ui/SearchInput";
 import StatusBadge from "../components/ui/StatusBadge";
@@ -13,42 +13,54 @@ import {
 } from "../services/reportService";
 
 const tableColumns = [
-  { label: "REPORT ID" },
-  { label: "PHOTO" },
-  { label: "EQUIPMENT NAME" },
-  { label: "DRIVER NAME" },
-  { label: "REPORT DATE" },
+  { label: "ID LAPORAN" },
+  { label: "FOTO" },
+  { label: "KENDARAAN / UNIT" },
+  { label: "NAMA PENGEMUDI" },
+  { label: "TANGGAL LAPORAN" },
   { label: "STATUS" },
   { label: "KPI" },
-  { label: "ACTIONS" },
+  { label: "AKSI" },
 ];
 
 const statusFilters = [
-  "All",
-  "Reported",
-  "In Progress",
-  "Waiting Parts",
-  "Completed",
+  "Semua",
+  "Dilaporkan",
+  "Dalam Proses",
+  "Menunggu Sparepart",
+  "Selesai",
   "Fatal",
+  "Ditolak",
+  "Dibatalkan",
 ];
 
-const API_STORAGE_URL = "http://127.0.0.1:8000/storage";
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "")
+  .replace(/\/api\/?$/, "")
+  .replace(/\/$/, "");
 
-function statusToBackendFilter(status) {
-  switch (status) {
-    case "Reported":
-      return "menunggu";
-    case "In Progress":
-      return "proses";
-    case "Waiting Parts":
-      return "butuh_followup_admin";
-    case "Completed":
-      return "selesai";
-    case "Fatal":
-      return "fatal";
-    default:
-      return "";
-  }
+const API_STORAGE_URL = String(
+  import.meta.env.VITE_STORAGE_URL ||
+    import.meta.env.VITE_API_STORAGE_URL ||
+    (API_BASE_URL ? `${API_BASE_URL}/storage` : "/storage")
+).replace(/\/$/, "");
+
+function isEmptyValue(value) {
+  return (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    value === "-" ||
+    String(value).trim().toLowerCase() === "null" ||
+    String(value).trim().toLowerCase() === "undefined"
+  );
+}
+
+function firstValid(...values) {
+  return values.find((value) => !isEmptyValue(value)) ?? null;
+}
+
+function firstValidArray(...arrays) {
+  return arrays.find((item) => Array.isArray(item) && item.length > 0) || [];
 }
 
 function normalizeStatusValue(value) {
@@ -59,60 +71,83 @@ function normalizeStatusValue(value) {
     .replaceAll("-", "_");
 }
 
-function isCompletedReport(report) {
-  const values = [
+function collectStatusValues(report) {
+  return [
     report?.status,
     report?.rawStatus,
+    report?.bookingStatus,
+    report?.rawBookingStatus,
+
+    report?.booking?.status,
+    report?.serviceBooking?.status,
+    report?.latestServiceBooking?.status,
+
     report?.raw?.status,
     report?.raw?.computed_status,
+    report?.raw?.computedStatus,
+
+    report?.raw?.booking_status,
+    report?.raw?.bookingStatus,
+    report?.raw?.service_booking_status,
+    report?.raw?.serviceBookingStatus,
+
+    report?.raw?.latest_service_booking?.status,
+    report?.raw?.latestServiceBooking?.status,
+    report?.raw?.service_booking?.status,
+    report?.raw?.serviceBooking?.status,
+    report?.raw?.booking?.status,
+
     report?.raw?.latest_technician_response?.status,
+    report?.raw?.latestTechnicianResponse?.status,
   ].map(normalizeStatusValue);
+}
+
+function isCompletedReport(report) {
+  const values = collectStatusValues(report);
 
   return values.some((value) =>
-    ["selesai", "finished", "completed", "complete"].includes(value)
+    [
+      "selesai",
+      "finished",
+      "completed",
+      "complete",
+      "done",
+      "selesai_diperbaiki",
+    ].includes(value)
   );
 }
 
 function isWaitingPartsReport(report) {
-  const values = [
-    report?.status,
-    report?.rawStatus,
-    report?.raw?.status,
-    report?.raw?.computed_status,
-    report?.raw?.latest_technician_response?.status,
-  ].map(normalizeStatusValue);
+  const values = collectStatusValues(report);
 
   return values.some((value) =>
     [
       "waiting_parts",
+      "waiting_part",
       "on_hold",
       "butuh_followup_admin",
       "butuh_followup",
       "menunggu_sparepart",
+      "menunggu_spareparts",
+      "menunggu_part",
+      "menunggu_parts",
+      "waiting_sparepart",
+      "waiting_spareparts",
+      "sparepart_pending",
+      "parts_pending",
     ].includes(value)
   );
 }
 
 function isStartedOrInProgressReport(report) {
-  const values = [
-    report?.status,
-    report?.rawStatus,
-    report?.bookingStatus,
-    report?.rawBookingStatus,
-    report?.raw?.status,
-    report?.raw?.computed_status,
-    report?.raw?.booking_status,
-    report?.raw?.service_booking_status,
-    report?.raw?.latest_service_booking?.status,
-    report?.raw?.service_booking?.status,
-    report?.raw?.booking?.status,
-    report?.raw?.latest_technician_response?.status,
-  ].map(normalizeStatusValue);
+  const values = collectStatusValues(report);
 
   return values.some((value) =>
     [
       "proses",
       "diproses",
+      "dalam_proses",
+      "sedang_diproses",
       "ongoing",
       "in_progress",
       "progress",
@@ -120,43 +155,107 @@ function isStartedOrInProgressReport(report) {
       "start_job",
       "job_started",
       "repair_started",
+      "repair_in_progress",
       "technician_started",
       "working",
       "on_progress",
-      "butuh_followup_admin",
-      "butuh_followup",
-      "waiting_parts",
-      "menunggu_sparepart",
-      "on_hold",
     ].includes(value)
   );
 }
 
+function isRejectedReport(report) {
+  const values = collectStatusValues(report);
+
+  return values.some((value) =>
+    ["reject", "rejected", "ditolak"].includes(value)
+  );
+}
+
+function isCanceledReport(report) {
+  const values = collectStatusValues(report);
+
+  return values.some((value) =>
+    ["cancel", "canceled", "cancelled", "dibatalkan"].includes(value)
+  );
+}
+
 function isCanceledOrRejected(report) {
-  const values = [
-    report?.status,
-    report?.rawStatus,
-    report?.bookingStatus,
-    report?.rawBookingStatus,
-    report?.raw?.status,
-    report?.raw?.booking_status,
-    report?.raw?.service_booking_status,
-    report?.raw?.latest_service_booking?.status,
-    report?.raw?.service_booking?.status,
-    report?.raw?.booking?.status,
-  ].map(normalizeStatusValue);
+  return isRejectedReport(report) || isCanceledReport(report);
+}
+
+function isFatalReport(report) {
+  const values = collectStatusValues(report);
+
+  return values.some((value) => value === "fatal");
+}
+
+function isReportedReport(report) {
+  const values = collectStatusValues(report);
 
   return values.some((value) =>
     [
-      "cancel",
-      "canceled",
-      "cancelled",
-      "dibatalkan",
-      "reject",
-      "rejected",
-      "ditolak",
+      "reported",
+      "dilaporkan",
+      "laporan_baru",
+      "new",
+      "menunggu",
+      "waiting",
+      "requested",
+      "pending",
     ].includes(value)
   );
+}
+
+function matchesStatusFilter(report, filter) {
+  if (filter === "Semua") return true;
+
+  if (filter === "Dilaporkan") {
+    return (
+      isReportedReport(report) &&
+      !isStartedOrInProgressReport(report) &&
+      !isWaitingPartsReport(report) &&
+      !isCompletedReport(report) &&
+      !isCanceledOrRejected(report) &&
+      !isFatalReport(report)
+    );
+  }
+
+  if (filter === "Dalam Proses") {
+    return (
+      isStartedOrInProgressReport(report) &&
+      !isWaitingPartsReport(report) &&
+      !isCompletedReport(report) &&
+      !isCanceledOrRejected(report) &&
+      !isFatalReport(report)
+    );
+  }
+
+  if (filter === "Menunggu Sparepart") {
+    return (
+      isWaitingPartsReport(report) &&
+      !isCompletedReport(report) &&
+      !isCanceledOrRejected(report) &&
+      !isFatalReport(report)
+    );
+  }
+
+  if (filter === "Selesai") {
+    return isCompletedReport(report);
+  }
+
+  if (filter === "Fatal") {
+    return isFatalReport(report);
+  }
+
+  if (filter === "Ditolak") {
+    return isRejectedReport(report);
+  }
+
+  if (filter === "Dibatalkan") {
+    return isCanceledReport(report);
+  }
+
+  return true;
 }
 
 function formatDate(value) {
@@ -171,7 +270,7 @@ function formatDate(value) {
 
     return date.toLocaleString("id-ID", {
       day: "2-digit",
-      month: "2-digit",
+      month: "long",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
@@ -184,11 +283,22 @@ function formatDate(value) {
 function getImagePath(report) {
   return (
     report?.image ||
+    report?.imageUrl ||
     report?.damageImage ||
     report?.damage_image ||
     report?.photo ||
+    report?.raw?.image_url ||
+    report?.raw?.imageUrl ||
+    report?.raw?.damage_image_url ||
+    report?.raw?.damageImageUrl ||
+    report?.raw?.photo_url ||
+    report?.raw?.photoUrl ||
     report?.raw?.image ||
     report?.raw?.damage_image ||
+    report?.raw?.damageImage ||
+    report?.raw?.photo ||
+    report?.raw?.image_path ||
+    report?.raw?.imagePath ||
     null
   );
 }
@@ -198,32 +308,66 @@ function getImageUrl(path) {
     return null;
   }
 
-  if (String(path).startsWith("http")) {
-    return path;
+  const stringPath = String(path);
+
+  if (stringPath.startsWith("http")) {
+    return stringPath;
   }
 
-  const cleanPath = String(path).replace(/^\/+/, "");
+  let cleanPath = stringPath.replace(/^\/+/, "");
+
+  if (cleanPath.startsWith("storage/")) {
+    cleanPath = cleanPath.replace(/^storage\//, "");
+  }
 
   return `${API_STORAGE_URL}/${cleanPath}`;
 }
 
-function hasKpi(report) {
-  return [report?.mttr, report?.mtbf, report?.ma].some(
-    (value) =>
-      value !== null &&
-      value !== undefined &&
-      value !== "" &&
-      value !== "null"
+function getKpiValueFromReport(report, key) {
+  const upperKey = String(key || "").toUpperCase();
+
+  return (
+    report?.[key] ??
+    report?.[upperKey] ??
+    report?.booking?.[key] ??
+    report?.booking?.[upperKey] ??
+    report?.serviceBooking?.[key] ??
+    report?.serviceBooking?.[upperKey] ??
+    report?.latestServiceBooking?.[key] ??
+    report?.latestServiceBooking?.[upperKey] ??
+    report?.raw?.[key] ??
+    report?.raw?.[upperKey] ??
+    report?.raw?.kpi?.[key] ??
+    report?.raw?.kpi?.[upperKey] ??
+    report?.raw?.performance?.[key] ??
+    report?.raw?.performance?.[upperKey] ??
+    report?.raw?.latest_service_booking?.[key] ??
+    report?.raw?.latest_service_booking?.[upperKey] ??
+    report?.raw?.latestServiceBooking?.[key] ??
+    report?.raw?.latestServiceBooking?.[upperKey] ??
+    report?.raw?.service_booking?.[key] ??
+    report?.raw?.service_booking?.[upperKey] ??
+    report?.raw?.serviceBooking?.[key] ??
+    report?.raw?.serviceBooking?.[upperKey] ??
+    report?.raw?.booking?.[key] ??
+    report?.raw?.booking?.[upperKey] ??
+    report?.raw?.latest_technician_response?.[key] ??
+    report?.raw?.latest_technician_response?.[upperKey] ??
+    report?.raw?.latestTechnicianResponse?.[key] ??
+    report?.raw?.latestTechnicianResponse?.[upperKey] ??
+    null
   );
 }
 
+function hasKpi(report) {
+  return ["mttr", "mtbf", "ma"].some((key) => {
+    const value = getKpiValueFromReport(report, key);
+    return !isEmptyValue(value);
+  });
+}
+
 function formatKpiValue(value, suffix = "") {
-  if (
-    value === null ||
-    value === undefined ||
-    value === "" ||
-    value === "null"
-  ) {
+  if (isEmptyValue(value)) {
     return "-";
   }
 
@@ -236,35 +380,319 @@ function formatKpiValue(value, suffix = "") {
   return `${number.toFixed(2)}${suffix}`;
 }
 
+function getSparePartsForMerge(report) {
+  return firstValidArray(
+    report?.spareParts,
+    report?.requestedSpareParts,
+    report?.partUsages,
+    report?.part_usages,
+    report?.sparePartUsages,
+    report?.spare_part_usages,
+    report?.usedParts,
+    report?.used_parts,
+    report?.partsUsed,
+    report?.parts_used,
+
+    report?.raw?.spare_parts,
+    report?.raw?.requested_spare_parts,
+    report?.raw?.part_usages,
+    report?.raw?.spare_part_usages,
+    report?.raw?.used_parts,
+    report?.raw?.parts_used,
+    report?.raw?.parts,
+
+    report?.raw?.repair?.part_usages,
+    report?.raw?.repair?.used_parts,
+
+    report?.raw?.latest_technician_response?.part_usages,
+    report?.raw?.technician_response?.part_usages,
+
+    report?.raw?.latest_service_booking?.part_usages,
+    report?.raw?.service_booking?.part_usages,
+    report?.raw?.booking?.part_usages
+  );
+}
+
+function mergeReportForModal(listReport, detailReport) {
+  const mttr = firstValid(
+    getKpiValueFromReport(detailReport, "mttr"),
+    getKpiValueFromReport(listReport, "mttr")
+  );
+
+  const mtbf = firstValid(
+    getKpiValueFromReport(detailReport, "mtbf"),
+    getKpiValueFromReport(listReport, "mtbf")
+  );
+
+  const ma = firstValid(
+    getKpiValueFromReport(detailReport, "ma"),
+    getKpiValueFromReport(listReport, "ma")
+  );
+
+  const image = firstValid(getImagePath(detailReport), getImagePath(listReport));
+
+  const spareParts = firstValidArray(
+    getSparePartsForMerge(detailReport),
+    getSparePartsForMerge(listReport)
+  );
+
+  return {
+    ...listReport,
+    ...detailReport,
+
+    id: firstValid(detailReport?.id, listReport?.id),
+    damageReportId: firstValid(
+      detailReport?.damageReportId,
+      listReport?.damageReportId,
+      detailReport?.id,
+      listReport?.id
+    ),
+
+    equipmentName: firstValid(
+      detailReport?.equipmentName,
+      listReport?.equipmentName,
+      detailReport?.equipName,
+      listReport?.equipName,
+      detailReport?.equip,
+      listReport?.equip
+    ),
+
+    plateNumber: firstValid(detailReport?.plateNumber, listReport?.plateNumber),
+
+    driverName: firstValid(
+      detailReport?.driverName,
+      listReport?.driverName,
+      detailReport?.operator,
+      listReport?.operator
+    ),
+
+    submitDate: firstValid(
+      detailReport?.submitDate,
+      detailReport?.createdAt,
+      detailReport?.created_at,
+      detailReport?.date,
+      detailReport?.raw?.created_at,
+      listReport?.submitDate,
+      listReport?.createdAt,
+      listReport?.created_at,
+      listReport?.date,
+      listReport?.raw?.created_at
+    ),
+
+    severity: firstValid(detailReport?.severity, listReport?.severity),
+
+    technicianName: firstValid(
+      detailReport?.technicianName,
+      listReport?.technicianName
+    ),
+
+    technicianNote: firstValid(
+      detailReport?.technicianNote,
+      listReport?.technicianNote
+    ),
+
+    image,
+    damage_image: image,
+    imageUrl: getImageUrl(image),
+
+    mttr,
+    mtbf,
+    ma,
+
+    spareParts,
+    partUsages: spareParts,
+    part_usages: spareParts,
+
+    raw: {
+      ...(listReport?.raw || {}),
+      ...(detailReport?.raw || {}),
+      mttr,
+      mtbf,
+      ma,
+      spare_parts: spareParts,
+      part_usages: spareParts,
+    },
+  };
+}
+
+function getDisplayStatus(report) {
+  if (isFatalReport(report)) return "Fatal";
+  if (isRejectedReport(report)) return "Ditolak";
+  if (isCanceledReport(report)) return "Dibatalkan";
+  if (isCompletedReport(report)) return "Selesai";
+  if (isWaitingPartsReport(report)) return "Menunggu Sparepart";
+  if (isStartedOrInProgressReport(report)) return "Dalam Proses";
+  if (isReportedReport(report)) return "Dilaporkan";
+
+  return firstValid(report?.status, report?.raw?.status, "-");
+}
+
+function getReportId(report) {
+  return report?.id || report?.damageReportId || report?.raw?.id || null;
+}
+
+function getReportDate(report) {
+  return (
+    report?.submitDate ||
+    report?.createdAt ||
+    report?.created_at ||
+    report?.date ||
+    report?.raw?.created_at ||
+    report?.raw?.reported_at ||
+    "-"
+  );
+}
+
+function NotificationToast({ notification, onClose }) {
+  if (!notification) return null;
+
+  const colorClass =
+    notification.type === "success"
+      ? "border-emerald-500/40 bg-emerald-950/90 text-emerald-100"
+      : notification.type === "warning"
+      ? "border-amber-500/40 bg-amber-950/90 text-amber-100"
+      : "border-red-500/40 bg-red-950/90 text-red-100";
+
+  const title =
+    notification.type === "success"
+      ? "Berhasil"
+      : notification.type === "warning"
+      ? "Perhatian"
+      : "Terjadi Kendala";
+
+  return (
+    <div className="fixed right-5 top-5 z-[9999] w-[340px] max-w-[calc(100vw-2rem)]">
+      <div
+        className={`
+          ${colorClass}
+          rounded-2xl
+          border
+          px-4
+          py-3
+          shadow-2xl
+          backdrop-blur
+        `}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-bold">{title}</div>
+            <div className="mt-1 text-xs leading-relaxed opacity-90">
+              {notification.message}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-lg leading-none opacity-70 transition hover:opacity-100"
+            aria-label="Tutup notifikasi"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmText = "Ya, Lanjutkan",
+  cancelText = "Batal",
+  loading = false,
+  onConfirm,
+  onCancel,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-djati-border-light bg-[#0f1117] p-5 shadow-2xl">
+        <h3 className="text-base font-bold text-white">{title}</h3>
+
+        <p className="mt-2 text-sm leading-relaxed text-djati-muted">
+          {message}
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="btn-ghost px-4 py-2 text-[0.78rem] font-semibold !rounded-lg disabled:opacity-60"
+          >
+            {cancelText}
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="btn-danger-outline px-4 py-2 text-[0.78rem] font-semibold !rounded-lg disabled:opacity-60"
+          >
+            {loading ? "Memproses..." : confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DamageReport() {
-  const [activeFilter, setActiveFilter] = useState("All");
+  const [activeFilter, setActiveFilter] = useState("Semua");
   const [searchQuery, setSearchQuery] = useState("");
-  const [reports, setReports] = useState([]);
+  const [allReports, setAllReports] = useState([]);
   const [modalData, setModalData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [notification, setNotification] = useState(null);
+  const [rejectTargetId, setRejectTargetId] = useState(null);
+  const [isRejecting, setIsRejecting] = useState(false);
+
+  const showNotification = (type, message) => {
+    setNotification({ type, message });
+  };
+
+  useEffect(() => {
+    if (!notification) return;
+
+    const timer = setTimeout(() => {
+      setNotification(null);
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [notification]);
+
+  const reports = useMemo(() => {
+    return allReports.filter((report) =>
+      matchesStatusFilter(report, activeFilter)
+    );
+  }, [allReports, activeFilter]);
 
   const fetchReports = async () => {
     try {
       setIsLoading(true);
 
       const filters = {};
-      const status = statusToBackendFilter(activeFilter);
-
-      if (status) {
-        filters.status = status;
-      }
 
       if (searchQuery.trim()) {
         filters.search = searchQuery.trim();
       }
 
       const data = await getReports(filters);
-      const filteredData = Array.isArray(data) ? data : [];
+      const safeData = Array.isArray(data) ? data : [];
 
-      setReports(filteredData);
+      setAllReports(safeData);
     } catch (err) {
-      console.error("FETCH REPORTS ERROR:", err);
-      setReports([]);
+      console.error("GAGAL MENGAMBIL DATA LAPORAN:", err);
+      setAllReports([]);
+
+      showNotification(
+        "error",
+        "Data laporan belum dapat dimuat. Periksa koneksi atau coba muat ulang halaman."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -273,7 +701,7 @@ export default function DamageReport() {
   useEffect(() => {
     fetchReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFilter]);
+  }, []);
 
   useEffect(() => {
     const delay = setTimeout(() => {
@@ -284,37 +712,95 @@ export default function DamageReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
-  const openDetail = async (id) => {
+  const openDetail = async (report) => {
     try {
-      const data = await getReportById(id);
-      setModalData(data);
+      const reportId = getReportId(report);
+
+      if (!reportId) {
+        setModalData(report);
+        return;
+      }
+
+      const detail = await getReportById(reportId);
+      const mergedData = mergeReportForModal(report, detail);
+
+      setModalData(mergedData);
     } catch (err) {
-      console.error("OPEN DETAIL ERROR:", err);
+      console.error("GAGAL MEMBUKA DETAIL LAPORAN:", err);
+
+      setModalData(report);
+
+      showNotification(
+        "warning",
+        "Detail lengkap belum dapat dimuat. Data ringkas tetap ditampilkan."
+      );
     }
   };
 
   const closeDetail = () => setModalData(null);
 
   const handleApprove = async (id) => {
+    if (!id) {
+      showNotification("warning", "ID laporan tidak ditemukan.");
+      return;
+    }
+
     try {
-      await approveFollowUp(id, "Follow-up disetujui oleh admin");
-      fetchReports();
+      await approveFollowUp(id, {
+        note: "Follow-up disetujui oleh admin.",
+      });
+
+      closeDetail();
+      await fetchReports();
+
+      showNotification(
+        "success",
+        "Follow-up laporan berhasil disetujui."
+      );
     } catch (err) {
-      console.error("APPROVE FOLLOW-UP ERROR:", err);
-      alert(err?.message || "Gagal approve follow-up report.");
+      console.error("GAGAL MENYETUJUI FOLLOW-UP:", err);
+
+      showNotification(
+        "error",
+        "Follow-up laporan belum dapat disetujui. Periksa data atau coba beberapa saat lagi."
+      );
     }
   };
 
-  const handleReject = async (id) => {
+  const handleReject = (id) => {
+    if (!id) {
+      showNotification("warning", "ID laporan tidak ditemukan.");
+      return;
+    }
+
+    setRejectTargetId(id);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectTargetId) {
+      showNotification("warning", "ID laporan tidak ditemukan.");
+      return;
+    }
+
     try {
-      await rejectReport(id);
-      fetchReports();
+      setIsRejecting(true);
+
+      await rejectReport(rejectTargetId);
+
+      setRejectTargetId(null);
+      closeDetail();
+      await fetchReports();
+
+      showNotification("success", "Laporan berhasil ditolak.");
     } catch (err) {
-      console.error("REJECT ERROR:", err);
-      alert(
-        err?.message ||
-          "Gagal reject report. Pastikan endpoint reject tersedia di backend."
+      console.error("GAGAL MENOLAK LAPORAN:", err);
+
+      showNotification(
+        "error",
+        "Laporan belum dapat ditolak. Pastikan data sudah benar dan coba kembali."
       );
+    } finally {
+      setIsRejecting(false);
     }
   };
 
@@ -323,13 +809,49 @@ export default function DamageReport() {
   };
 
   return (
-    <DashboardLayout title="Damage Reports">
-      <section className="flex items-center justify-between gap-4 mb-5 panel px-5 py-4">
+    <div className="flex min-h-screen bg-[#0f1117] text-white">
+      <Sidebar />
+
+      <NotificationToast
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(rejectTargetId)}
+        title="Tolak Laporan"
+        message="Apakah Anda yakin ingin menolak laporan ini? Tindakan ini akan mengubah status laporan menjadi ditolak."
+        confirmText="Ya, Tolak Laporan"
+        cancelText="Batal"
+        loading={isRejecting}
+        onConfirm={handleConfirmReject}
+        onCancel={() => setRejectTargetId(null)}
+      />
+
+      <main className="min-w-0 flex-1 overflow-x-hidden">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.16),transparent_35%),radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_30%)] p-5 md:p-7">
+          <div className="mx-auto max-w-[1600px]">
+            <header className="mb-6 rounded-3xl border border-white/10 bg-gradient-to-br from-[#1f1f1f]/95 to-[#171717]/95 p-6 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+              <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-djati-amber/80">
+                DAMAGE REPORT
+              </p>
+
+              <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-3xl">
+                Laporan Kerusakan
+              </h1>
+
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-white/45">
+                Pantau laporan kerusakan kendaraan, lihat detail foto dan KPI,
+                serta proses follow-up laporan tanpa mengubah bentuk tabel yang sudah ada.
+              </p>
+            </header>
+
+            <section className="mb-5 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#171a23]/95 px-5 py-4 shadow-2xl shadow-black/20 lg:flex-row lg:items-center lg:justify-between">
         <SearchInput
-          placeholder="Search reports..."
+          placeholder="Cari laporan, kendaraan, atau pengemudi..."
           value={searchQuery}
           onChange={handleSearch}
-          className="flex-[0_1_400px]"
+          className="w-full lg:flex-[0_1_420px]"
         />
 
         <div className="flex items-center gap-3">
@@ -337,7 +859,7 @@ export default function DamageReport() {
             htmlFor="status-filter"
             className="text-[0.8rem] text-djati-muted font-medium whitespace-nowrap"
           >
-            Status:
+            Filter Status:
           </label>
 
           <div className="relative">
@@ -351,7 +873,7 @@ export default function DamageReport() {
                 rounded-lg
                 border
                 border-djati-border-light
-                bg-[#11131a]
+                bg-[#0f1117]
                 px-4
                 py-2.5
                 pr-10
@@ -363,8 +885,8 @@ export default function DamageReport() {
                 duration-200
                 hover:border-djati-amber
                 focus:border-djati-amber
-                focus:ring-2
-                focus:ring-djati-amber/20
+                focus:ring-4
+                focus:ring-djati-amber/10
                 cursor-pointer
               "
             >
@@ -372,7 +894,7 @@ export default function DamageReport() {
                 <option
                   key={status}
                   value={status}
-                  className="bg-[#11131a] text-white"
+                  className="bg-[#0f1117] text-white"
                 >
                   {status}
                 </option>
@@ -386,23 +908,56 @@ export default function DamageReport() {
         </div>
       </section>
 
-      <section>
-        <DataTable
+            <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#171a23]/95 shadow-2xl shadow-black/20">
+              <DataTable
           columns={tableColumns}
           data={reports}
           className="!rounded-b-none !border-b-0"
-          renderRow={(r) => {
-            const isCompleted = isCompletedReport(r);
-            const isWaitingParts = isWaitingPartsReport(r);
-            const isCanceledRejected = isCanceledOrRejected(r);
-            const isStartedOrInProgress = isStartedOrInProgressReport(r);
+          renderRow={(report, index) => {
+            const reportId = getReportId(report) || `TEMP-${index + 1}`;
 
-            const imagePath = getImagePath(r);
+            const isCompleted = isCompletedReport(report);
+            const isWaitingParts = isWaitingPartsReport(report);
+            const isCanceledRejected = isCanceledOrRejected(report);
+            const isStartedOrInProgress = isStartedOrInProgressReport(report);
+            const isFatal = isFatalReport(report);
+
+            const imagePath = getImagePath(report);
             const imageUrl = getImageUrl(imagePath);
 
+            const mttr = getKpiValueFromReport(report, "mttr");
+            const mtbf = getKpiValueFromReport(report, "mtbf");
+            const ma = getKpiValueFromReport(report, "ma");
+
+            const reportDate = getReportDate(report);
+            const displayStatus = getDisplayStatus(report);
+
+            const equipmentName =
+              report.equipmentName ||
+              report.equipName ||
+              report.equip ||
+              report.raw?.vehicle?.equipment_name ||
+              report.raw?.vehicle?.equipmentName ||
+              "Unit tidak diketahui";
+
+            const plateNumber =
+              report.plateNumber ||
+              report.raw?.vehicle?.plate_number ||
+              report.raw?.vehicle?.plateNumber ||
+              "-";
+
+            const driverName =
+              report.driverName ||
+              report.operator ||
+              report.raw?.driver?.name ||
+              report.raw?.user?.name ||
+              "-";
+
             return (
-              <tr key={r.id} className="table-row-hover">
-                <td className="px-4 py-3.5 text-[0.82rem]">#{r.id}</td>
+              <tr key={reportId} className="table-row-hover">
+                <td className="px-4 py-3.5 text-[0.82rem] font-semibold">
+                  #{reportId}
+                </td>
 
                 <td className="px-4 py-3.5">
                   {imageUrl ? (
@@ -410,11 +965,11 @@ export default function DamageReport() {
                       type="button"
                       onClick={() => window.open(imageUrl, "_blank")}
                       className="block"
-                      title="Open damage image"
+                      title="Buka foto kerusakan"
                     >
                       <img
                         src={imageUrl}
-                        alt={`Damage report ${r.id}`}
+                        alt={`Foto kerusakan laporan ${reportId}`}
                         className="
                           w-[72px]
                           h-[72px]
@@ -457,37 +1012,37 @@ export default function DamageReport() {
                       px-2
                     `}
                   >
-                    No Image
+                    Tidak Ada Foto
                   </div>
                 </td>
 
                 <td className="px-4 py-3.5 text-[0.82rem]">
-                  <div className="font-semibold">
-                    {r.equipmentName || r.equip || "Unknown Unit"}
-                  </div>
+                  <div className="font-semibold">{equipmentName}</div>
                   <div className="text-[0.72rem] text-djati-muted">
-                    Plate: {r.plateNumber || "-"}
+                    Nomor Polisi: {plateNumber}
                   </div>
                 </td>
 
                 <td className="px-4 py-3.5 text-[0.82rem]">
-                  {r.driverName || r.operator || "-"}
+                  {driverName}
                 </td>
 
                 <td className="px-4 py-3.5 text-[0.82rem]">
-                  {formatDate(r.createdAt || r.date)}
+                  {formatDate(reportDate)}
                 </td>
 
                 <td className="px-4 py-3.5">
-                  <StatusBadge variant={r.status}>{r.status}</StatusBadge>
+                  <StatusBadge variant={report.status || displayStatus}>
+                    {displayStatus}
+                  </StatusBadge>
                 </td>
 
                 <td className="px-4 py-3.5 text-[0.78rem]">
-                  {hasKpi(r) ? (
+                  {hasKpi(report) ? (
                     <div className="space-y-1 text-djati-muted">
-                      <div>MTTR: {formatKpiValue(r.mttr, " hrs")}</div>
-                      <div>MTBF: {formatKpiValue(r.mtbf, " hrs")}</div>
-                      <div>MA: {formatKpiValue(r.ma, "%")}</div>
+                      <div>MTTR: {formatKpiValue(mttr, " jam")}</div>
+                      <div>MTBF: {formatKpiValue(mtbf, " jam")}</div>
+                      <div>MA: {formatKpiValue(ma, "%")}</div>
                     </div>
                   ) : (
                     <span className="text-djati-muted">-</span>
@@ -497,29 +1052,33 @@ export default function DamageReport() {
                 <td className="px-4 py-3.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <button
-                      onClick={() => openDetail(r.id)}
+                      type="button"
+                      onClick={() => openDetail(report)}
                       className="btn-ghost px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
                     >
-                      View Detail
+                      Lihat Detail
                     </button>
 
-                    {isWaitingParts && !isCanceledRejected && (
+                    {isWaitingParts && !isCanceledRejected && !isFatal && (
                       <button
-                        onClick={() => handleApprove(r.id)}
+                        type="button"
+                        onClick={() => handleApprove(reportId)}
                         className="btn-success-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
                       >
-                        Approve Follow-up
+                        Setujui Follow-up
                       </button>
                     )}
 
                     {!isCompleted &&
                       !isCanceledRejected &&
-                      !isStartedOrInProgress && (
+                      !isStartedOrInProgress &&
+                      !isFatal && (
                         <button
-                          onClick={() => handleReject(r.id)}
+                          type="button"
+                          onClick={() => handleReject(reportId)}
                           className="btn-danger-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
                         >
-                          Reject
+                          Tolak
                         </button>
                       )}
                   </div>
@@ -530,24 +1089,27 @@ export default function DamageReport() {
         />
 
         {isLoading && (
-          <div className="panel px-5 py-4 text-sm text-djati-muted">
-            Loading reports...
+          <div className="border-t border-white/10 bg-[#171a23]/95 px-5 py-4 text-sm text-djati-muted">
+            Memuat data laporan...
           </div>
         )}
 
         {!isLoading && reports.length === 0 && (
-          <div className="panel px-5 py-4 text-sm text-djati-muted">
-            Tidak ada laporan untuk filter ini.
+          <div className="border-t border-white/10 bg-[#171a23]/95 px-5 py-4 text-sm text-djati-muted">
+            Tidak ada laporan yang sesuai dengan filter ini.
           </div>
         )}
       </section>
 
-      <DamageDetailModal
-        data={modalData}
-        onClose={closeDetail}
-        onApprove={handleApprove}
-        onReject={handleReject}
-      />
-    </DashboardLayout>
+            <DamageDetailModal
+              data={modalData}
+              onClose={closeDetail}
+              onApprove={handleApprove}
+              onReject={handleReject}
+            />
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }

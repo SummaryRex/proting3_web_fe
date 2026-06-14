@@ -1,61 +1,45 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit, XCircle, RefreshCw, CalendarCheck } from 'lucide-react';
+import {
+  CalendarCheck,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  ListChecks,
+  Truck,
+  Wrench,
+  XCircle,
+} from 'lucide-react';
 
-import DashboardLayout from '../components/layouts/DashboardLayout';
-import DataTable from '../components/ui/DataTable';
-import StatusBadge from '../components/ui/StatusBadge';
+import Sidebar from '../components/Sidebar';
 import ScheduleModal from '../components/modals/ScheduleModal';
-import EditScheduleModal from '../components/modals/EditScheduleModal';
 
 import {
   getApprovedReports,
   getSchedules,
   approveBooking,
-  rescheduleBooking,
-  cancelBooking,
 } from '../services/scheduleService';
 
-const reportColumns = [
-  { label: 'Equipment Name' },
-  { label: 'Damage Description' },
-  { label: 'Operator' },
-  { label: 'Preferred Date' },
-  { label: 'Report Date' },
-  { label: 'Action' },
-];
-
-const scheduleColumns = [
-  { label: 'Schedule ID' },
-  { label: 'Equipment Name' },
-  { label: 'Driver' },
-  { label: 'Technician' },
-  { label: 'Scheduled Date' },
-  { label: 'Priority' },
-  { label: 'Status' },
-  { label: 'Actions', className: '!text-right !pr-5' },
-];
-
 const statusLabels = {
-  requested: 'Requested',
-  pending: 'Requested',
-  approved: 'Scheduled',
-  scheduled: 'Scheduled',
-  rescheduled: 'Rescheduled',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  finished: 'Completed',
-  selesai: 'Completed',
-  canceled: 'Canceled',
-  cancelled: 'Canceled',
-  rejected: 'Rejected',
+  requested: 'Menunggu Admin',
+  pending: 'Menunggu Admin',
+  approved: 'Terjadwal',
+  scheduled: 'Terjadwal',
+  rescheduled: 'Dijadwalkan Ulang',
+  in_progress: 'Dalam Proses',
+  completed: 'Selesai',
+  finished: 'Selesai',
+  selesai: 'Selesai',
+  canceled: 'Dibatalkan',
+  cancelled: 'Dibatalkan',
+  rejected: 'Ditolak',
 };
 
 const priorityLabels = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  critical: 'Critical',
+  low: 'Rendah',
+  medium: 'Sedang',
+  high: 'Tinggi',
+  critical: 'Kritis',
 };
 
 const activeScheduleStatuses = [
@@ -67,9 +51,6 @@ const activeScheduleStatuses = [
   'canceled',
   'cancelled',
 ];
-
-const editableStatuses = ['approved', 'scheduled', 'rescheduled'];
-const cancelableStatuses = ['approved', 'scheduled', 'rescheduled', 'requested'];
 
 function normalizeStatus(value) {
   if (!value) return 'requested';
@@ -90,6 +71,27 @@ function normalizeStatus(value) {
   return status;
 }
 
+function getFriendlyErrorMessage(error, fallback) {
+  const serverMessage = error?.response?.data?.message;
+  const message = String(serverMessage || '').toLowerCase();
+
+  const isTechnicalMessage =
+    message.includes('localhost') ||
+    message.includes('127.0.0.1') ||
+    message.includes('endpoint') ||
+    message.includes('network error') ||
+    message.includes('request failed') ||
+    message.includes('axios') ||
+    message.includes('http://') ||
+    message.includes('https://');
+
+  if (serverMessage && !isTechnicalMessage) {
+    return serverMessage;
+  }
+
+  return fallback;
+}
+
 function formatDate(value) {
   if (!value || value === '-') return '-';
 
@@ -102,7 +104,7 @@ function formatDate(value) {
 
     return date.toLocaleString('id-ID', {
       day: '2-digit',
-      month: '2-digit',
+      month: 'long',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
@@ -155,7 +157,7 @@ function extractMechanicFromNote(noteAdmin) {
     return '';
   }
 
-  const match = noteAdmin.match(/Mechanic:\s*([^|]+)/i);
+  const match = noteAdmin.match(/(?:Mechanic|Teknisi):\s*([^|]+)/i);
 
   if (!match) {
     return '';
@@ -246,7 +248,7 @@ function normalizeBookingToReport(booking) {
       vehicle?.equipment_name ||
       vehicle?.name ||
       booking?.equipment_name ||
-      'Unknown Unit',
+      'Unit Tidak Diketahui',
 
     plateNumber:
       vehicle?.plate_number ||
@@ -319,7 +321,7 @@ function normalizeBookingToSchedule(booking) {
       vehicle?.equipment_name ||
       vehicle?.name ||
       booking?.equipment_name ||
-      'Unknown Unit',
+      'Unit Tidak Diketahui',
 
     plateNumber:
       vehicle?.plate_number ||
@@ -343,8 +345,7 @@ function normalizeBookingToSchedule(booking) {
     preferredAt: booking?.preferred_at || '',
 
     priority:
-      booking?.priority ||
-      'medium',
+      booking?.priority || 'medium',
 
     status,
 
@@ -361,10 +362,142 @@ function buildAdminNote({ mechanic, priority, notes }) {
   const cleanNotes = notes?.trim();
 
   if (cleanNotes) {
-    return `Mechanic: ${mechanicName || '-'} | Priority: ${cleanPriority} | Notes: ${cleanNotes}`;
+    return `Teknisi: ${mechanicName || '-'} | Prioritas: ${cleanPriority} | Catatan: ${cleanNotes}`;
   }
 
-  return `Mechanic: ${mechanicName || '-'} | Priority: ${cleanPriority}`;
+  return `Teknisi: ${mechanicName || '-'} | Prioritas: ${cleanPriority}`;
+}
+
+function NotificationToast({ notification, onClose }) {
+  if (!notification) return null;
+
+  const colorClass =
+    notification.type === 'success'
+      ? 'border-green-500/40 bg-green-500/10 text-green-400'
+      : notification.type === 'warning'
+      ? 'border-djati-amber/40 bg-djati-amber/10 text-djati-amber'
+      : 'border-red-500/40 bg-red-500/10 text-red-400';
+
+  const title =
+    notification.type === 'success'
+      ? 'Berhasil'
+      : notification.type === 'warning'
+      ? 'Perhatian'
+      : 'Terjadi Kendala';
+
+  return (
+    <div className="fixed right-5 top-5 z-[9999] w-[340px] max-w-[calc(100vw-2rem)]">
+      <div
+        className={`rounded-2xl border bg-[#171a23] px-4 py-3 shadow-2xl backdrop-blur ${colorClass}`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-bold">{title}</h4>
+            <p className="mt-1 text-xs leading-relaxed opacity-90">
+              {notification.message}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-lg leading-none opacity-70 transition hover:opacity-100"
+            aria-label="Tutup notifikasi"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({ icon: Icon, label, value, hint, tone = 'amber' }) {
+  const toneClass =
+    tone === 'green'
+      ? 'border-green-500/20 bg-green-500/10 text-green-400'
+      : tone === 'blue'
+      ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+      : tone === 'red'
+      ? 'border-red-500/20 bg-red-500/10 text-red-400'
+      : 'border-djati-amber/20 bg-djati-amber/10 text-djati-amber';
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl shadow-black/10">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm text-white/45">{label}</p>
+          <h3 className="mt-2 text-3xl font-bold text-white">{value}</h3>
+          {hint && <p className="mt-1 text-xs text-white/30">{hint}</p>}
+        </div>
+
+        <div className={`rounded-2xl border p-3 ${toneClass}`}>
+          <Icon size={20} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PriorityBadge({ priority }) {
+  const value = priority || 'medium';
+
+  const config = {
+    low: 'border-green-500/30 bg-green-500/10 text-green-400',
+    medium: 'border-djati-amber/30 bg-djati-amber/10 text-djati-amber',
+    high: 'border-orange-500/30 bg-orange-500/10 text-orange-300',
+    critical: 'border-red-500/30 bg-red-500/10 text-red-400',
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${
+        config[value] || config.medium
+      }`}
+    >
+      {priorityLabels[value] || value || 'Sedang'}
+    </span>
+  );
+}
+
+function ScheduleStatusBadge({ status }) {
+  const value = normalizeStatus(status);
+
+  const config = {
+    requested: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400',
+    approved: 'border-green-500/30 bg-green-500/10 text-green-400',
+    rescheduled: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
+    in_progress: 'border-djati-amber/30 bg-djati-amber/10 text-djati-amber',
+    completed: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    canceled: 'border-red-500/30 bg-red-500/10 text-red-400',
+    rejected: 'border-red-500/30 bg-red-500/10 text-red-400',
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${
+        config[value] || 'border-white/10 bg-white/5 text-white/60'
+      }`}
+    >
+      {statusLabels[value] || value || '-'}
+    </span>
+  );
+}
+
+function EmptyState({ title, description, icon: Icon = ClipboardList }) {
+  return (
+    <div className="py-12 text-center">
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+        <Icon size={22} className="text-white/35" />
+      </div>
+
+      <p className="font-semibold text-white/70">{title}</p>
+
+      {description && (
+        <p className="mt-1 text-xs text-white/35">{description}</p>
+      )}
+    </div>
+  );
 }
 
 export default function MaintenanceScheduling() {
@@ -377,23 +510,39 @@ export default function MaintenanceScheduling() {
   const [selectedReport, setSelectedReport] = useState(null);
 
   const [showSchedule, setShowSchedule] = useState(false);
-  const [editData, setEditData] = useState(null);
 
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isLoading = isLoadingReports || isLoadingSchedules;
+  const [notification, setNotification] = useState(null);
+
+  const showNotification = (type, message) => {
+    setNotification({
+      type,
+      message,
+    });
+  };
+
+  useEffect(() => {
+    if (!notification) return;
+
+    const timer = setTimeout(() => {
+      setNotification(null);
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [notification]);
 
   const stats = useMemo(() => {
     const requested = requestedRows.length;
 
-    const active = schedules.filter((x) =>
-      ['approved', 'rescheduled', 'in_progress'].includes(x.status)
+    const active = schedules.filter((item) =>
+      ['approved', 'rescheduled', 'in_progress'].includes(item.status)
     ).length;
 
-    const completed = schedules.filter((x) => x.status === 'completed').length;
-    const canceled = schedules.filter((x) => x.status === 'canceled').length;
+    const completed = schedules.filter((item) => item.status === 'completed').length;
+    const canceled = schedules.filter((item) => item.status === 'canceled').length;
 
     return {
       requested,
@@ -409,15 +558,22 @@ export default function MaintenanceScheduling() {
 
       const bookings = await getApprovedReports();
 
-      console.log('REQUESTED API:', bookings);
-
       const rows = (Array.isArray(bookings) ? bookings : [])
         .filter((booking) => normalizeStatus(booking?.status) === 'requested')
         .map(normalizeBookingToReport);
 
       setRequestedRows(rows);
     } catch (error) {
-      console.error('LOAD REQUEST ERROR:', error);
+      console.error('GAGAL MEMUAT PERMINTAAN JADWAL:', error);
+
+      showNotification(
+        'error',
+        getFriendlyErrorMessage(
+          error,
+          'Permintaan jadwal belum dapat dimuat. Periksa koneksi atau coba beberapa saat lagi.'
+        )
+      );
+
       setRequestedRows([]);
     } finally {
       setIsLoadingReports(false);
@@ -430,8 +586,6 @@ export default function MaintenanceScheduling() {
 
       const bookings = await getSchedules();
 
-      console.log('SCHEDULE API:', bookings);
-
       const rows = (Array.isArray(bookings) ? bookings : [])
         .filter((booking) =>
           activeScheduleStatuses.includes(normalizeStatus(booking?.status))
@@ -440,14 +594,23 @@ export default function MaintenanceScheduling() {
 
       setSchedules(rows);
     } catch (error) {
-      console.error('LOAD SCHEDULE ERROR:', error);
+      console.error('GAGAL MEMUAT JADWAL PERAWATAN:', error);
+
+      showNotification(
+        'error',
+        getFriendlyErrorMessage(
+          error,
+          'Jadwal perawatan belum dapat dimuat. Silakan coba kembali.'
+        )
+      );
+
       setSchedules([]);
     } finally {
       setIsLoadingSchedules(false);
     }
   };
 
-  const refreshAll = async () => {
+  const loadAllData = async () => {
     await Promise.all([
       loadRequestedBookings(),
       loadSchedules(),
@@ -455,7 +618,7 @@ export default function MaintenanceScheduling() {
   };
 
   useEffect(() => {
-    refreshAll();
+    loadAllData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -471,10 +634,8 @@ export default function MaintenanceScheduling() {
     try {
       setIsSubmitting(true);
 
-      console.log('SCHEDULE DATA FROM MODAL:', scheduleData);
-
       if (!selectedReport.bookingId) {
-        alert('Booking ID tidak ditemukan.');
+        showNotification('warning', 'ID pemesanan tidak ditemukan.');
         return;
       }
 
@@ -487,7 +648,7 @@ export default function MaintenanceScheduling() {
         getMechanicIdFromValue(scheduleData?.mechanic);
 
       if (!technicianId) {
-        alert('Technician wajib dipilih.');
+        showNotification('warning', 'Teknisi wajib dipilih.');
         return;
       }
 
@@ -497,7 +658,7 @@ export default function MaintenanceScheduling() {
         scheduleData?.dateVal;
 
       if (!scheduledAt) {
-        alert('Tanggal schedule wajib diisi.');
+        showNotification('warning', 'Tanggal jadwal wajib diisi.');
         return;
       }
 
@@ -521,153 +682,24 @@ export default function MaintenanceScheduling() {
         }),
       };
 
-      console.log('APPROVE BOOKING PAYLOAD:', payload);
-
       await approveBooking(selectedReport.bookingId, payload);
 
       setShowSchedule(false);
       setSelectedReport(null);
       setSchedEquip('');
 
-      await refreshAll();
+      await loadAllData();
 
-      alert('Schedule maintenance berhasil dibuat.');
+      showNotification('success', 'Jadwal perawatan berhasil dibuat.');
     } catch (error) {
-      console.error('CONFIRM SCHEDULE ERROR:', error);
+      console.error('GAGAL MEMBUAT JADWAL:', error);
 
-      alert(
-        error?.response?.data?.message ||
-          error?.message ||
-          'Gagal membuat schedule maintenance.'
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const openEditModal = (id) => {
-    const schedule = schedules.find((x) => x.id === id);
-
-    if (schedule) {
-      setEditData(schedule);
-    }
-  };
-
-  const saveEdit = async (updated) => {
-    try {
-      setIsSubmitting(true);
-
-      console.log('EDIT DATA FROM MODAL:', updated);
-
-      if (!updated?.bookingId) {
-        alert('Booking ID tidak valid.');
-        return;
-      }
-
-      if (updated?.status === 'cancelled' || updated?.status === 'canceled') {
-        await cancelBooking(updated.bookingId, {
-          note_admin:
-            updated.noteAdmin ||
-            `Schedule untuk ${updated.equip || 'unit'} dibatalkan admin.`,
-        });
-
-        setEditData(null);
-        await refreshAll();
-
-        alert('Schedule berhasil dibatalkan.');
-        return;
-      }
-
-      if (!updated?.dateVal) {
-        alert('Tanggal schedule wajib diisi.');
-        return;
-      }
-
-      const technicianId =
-        updated?.technician_id ||
-        updated?.mechanic_id ||
-        updated?.raw?.technician_id ||
-        updated?.raw?.mechanic_id ||
-        updated?.raw?.technician?.id ||
-        updated?.raw?.mechanic?.id ||
-        getMechanicIdFromValue(updated?.technician) ||
-        getMechanicIdFromValue(updated?.mechanic);
-
-      if (!technicianId) {
-        alert('Technician ID tidak ditemukan. Data schedule tidak valid.');
-        return;
-      }
-
-      const mechanicName =
-        updated?.technician_name ||
-        updated?.mechanic_name ||
-        getMechanicNameFromValue(updated?.technician) ||
-        getMechanicNameFromValue(updated?.mechanic) ||
-        getMechanicNameFromBooking(updated?.raw);
-
-      const payload = {
-        scheduled_at: updated.dateVal,
-        estimated_finish_at: updated.estimatedFinishAt || null,
-        priority: updated.priority || 'medium',
-        technician_id: Number(technicianId),
-        note_admin:
-          updated.noteAdmin?.trim() ||
-          buildAdminNote({
-            mechanic: mechanicName,
-            priority: updated.priority,
-            notes: '',
-          }),
-      };
-
-      console.log('RESCHEDULE PAYLOAD:', payload);
-
-      await rescheduleBooking(updated.bookingId, payload);
-
-      setEditData(null);
-
-      await refreshAll();
-
-      alert('Schedule berhasil diperbarui.');
-    } catch (error) {
-      console.error('SAVE EDIT ERROR:', error);
-
-      alert(
-        error?.response?.data?.message ||
-          error?.message ||
-          'Gagal update schedule.'
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCancelSchedule = async (schedule) => {
-    if (!schedule?.bookingId) {
-      alert('ID booking tidak valid.');
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Batalkan jadwal maintenance untuk ${schedule.equip}?`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      setIsSubmitting(true);
-
-      await cancelBooking(schedule.bookingId, {
-        note_admin: `Schedule untuk ${schedule.equip} dibatalkan admin.`,
-      });
-
-      await refreshAll();
-    } catch (error) {
-      console.error('CANCEL SCHEDULE ERROR:', error);
-
-      alert(
-        error?.response?.data?.message ||
-          error?.message ||
-          'Gagal membatalkan jadwal.'
+      showNotification(
+        'error',
+        getFriendlyErrorMessage(
+          error,
+          'Jadwal perawatan belum dapat dibuat. Periksa kembali data jadwal.'
+        )
       );
     } finally {
       setIsSubmitting(false);
@@ -675,265 +707,343 @@ export default function MaintenanceScheduling() {
   };
 
   return (
-    <DashboardLayout title="Maintenance Scheduling">
-      <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="panel p-5">
-          <div className="text-[0.75rem] text-djati-muted">
-            Waiting Admin
-          </div>
-          <div className="text-2xl font-bold text-djati-amber mt-1">
-            {stats.requested}
-          </div>
-        </div>
+    <div className="flex min-h-screen bg-[#0f1117] text-white">
+      <Sidebar />
 
-        <div className="panel p-5">
-          <div className="text-[0.75rem] text-djati-muted">
-            Active Schedule
-          </div>
-          <div className="text-2xl font-bold text-blue-300 mt-1">
-            {stats.active}
-          </div>
-        </div>
+      <NotificationToast
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
 
-        <div className="panel p-5">
-          <div className="text-[0.75rem] text-djati-muted">
-            Completed
-          </div>
-          <div className="text-2xl font-bold text-green-400 mt-1">
-            {stats.completed}
-          </div>
-        </div>
-
-        <div className="panel p-5">
-          <div className="text-[0.75rem] text-djati-muted">
-            Canceled
-          </div>
-          <div className="text-2xl font-bold text-red-400 mt-1">
-            {stats.canceled}
-          </div>
-        </div>
-      </section>
-
-      <section className="panel p-6 mb-6">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 className="text-base font-bold text-[#e8e8e8]">
-              Requested Service Bookings
-            </h2>
-            <p className="text-[0.75rem] text-djati-muted mt-1">
-              Booking dari driver yang masih menunggu admin menentukan jadwal dan teknisi.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              disabled={isLoading || isSubmitting}
-              onClick={refreshAll}
-              className="text-[0.8rem] font-semibold text-djati-amber hover:underline disabled:opacity-60 flex items-center gap-1.5"
-            >
-              <RefreshCw size={14} />
-              Refresh
-            </button>
-
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                navigate('/damage-reports');
-              }}
-              className="text-[0.8rem] font-semibold text-djati-amber no-underline hover:underline"
-            >
-              View All
-            </a>
-          </div>
-        </div>
-
-        <DataTable
-          columns={reportColumns}
-          data={requestedRows}
-          renderRow={(r) => (
-            <tr
-              key={`${r.bookingId || 'booking'}-${r.id}`}
-              className="table-row-hover"
-            >
-              <td className="px-4 py-3.5 text-[0.84rem] text-djati-text border-b border-white/[0.04]">
-                <strong className="text-djati-text-bright font-semibold">
-                  {r.equip}
-                </strong>
-                <div className="text-[0.7rem] text-djati-muted mt-1">
-                  Plate: {r.plateNumber || '-'}
+      <main className="min-w-0 flex-1 overflow-x-hidden">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.16),transparent_35%),radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_30%)] p-5 md:p-7">
+          <div className="mx-auto max-w-[1600px]">
+            <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-djati-amber/20 bg-djati-amber/10 px-3 py-1 text-xs font-bold text-djati-amber">
+                  Maintenance Scheduling
                 </div>
-                <div className="text-[0.7rem] text-djati-muted mt-1">
-                  Booking: #{r.bookingId || '-'} • Report: #{r.damageReportId || '-'}
+
+                <h1 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
+                  Penjadwalan Perawatan
+                </h1>
+
+                <p className="mt-2 max-w-4xl text-sm leading-6 text-white/45">
+                  Kelola permintaan servis dari pengemudi, tentukan jadwal
+                  perawatan, pilih teknisi, serta pantau status jadwal dalam
+                  satu halaman dengan tampilan yang konsisten seperti VehiclePage.
+                </p>
+              </div>
+
+            </header>
+
+            <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+              <SummaryCard
+                icon={ClipboardList}
+                label="Menunggu Admin"
+                value={stats.requested}
+                hint="Permintaan jadwal dari pengemudi"
+              />
+
+              <SummaryCard
+                icon={Clock3}
+                label="Jadwal Aktif"
+                value={stats.active}
+                hint="Terjadwal atau sedang berjalan"
+                tone="blue"
+              />
+
+              <SummaryCard
+                icon={CheckCircle2}
+                label="Selesai"
+                value={stats.completed}
+                hint="Perawatan telah selesai"
+                tone="green"
+              />
+
+              <SummaryCard
+                icon={XCircle}
+                label="Dibatalkan"
+                value={stats.canceled}
+                hint="Jadwal yang dibatalkan"
+                tone="red"
+              />
+            </section>
+
+            <section className="mb-6 rounded-2xl border border-white/10 bg-[#171a23]/95 shadow-2xl shadow-black/20">
+              <div className="border-b border-white/10 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-djati-amber">
+                      Permintaan Jadwal Servis
+                    </h2>
+
+                    <p className="mt-1 text-xs leading-5 text-white/40">
+                      Daftar permintaan dari pengemudi yang masih menunggu admin
+                      menentukan jadwal dan teknisi.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate('/damage-reports')}
+                    className="inline-flex w-fit items-center justify-center gap-2 rounded-xl border border-djati-amber/20 bg-djati-amber/10 px-4 py-2.5 text-xs font-bold text-djati-amber transition hover:bg-djati-amber/20"
+                  >
+                    <ListChecks size={15} />
+                    Lihat Semua Laporan
+                  </button>
                 </div>
-              </td>
+              </div>
 
-              <td className="px-4 py-3.5 max-w-[260px] whitespace-nowrap overflow-hidden text-ellipsis text-[0.84rem] text-white/50 border-b border-white/[0.04]">
-                {r.desc}
-                {r.damageType && r.damageType !== '-' && (
-                  <div className="text-[0.7rem] text-djati-muted mt-1">
-                    Type: {r.damageType}
-                  </div>
-                )}
-              </td>
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-[1180px] table-auto text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-djati-amber text-xs uppercase tracking-wide text-black">
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Unit / Equipment
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Deskripsi Kerusakan
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Pengemudi
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Tanggal Permintaan
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Tanggal Laporan
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-right font-bold">
+                        Aksi
+                      </th>
+                    </tr>
+                  </thead>
 
-              <td className="px-4 py-3.5 text-[0.84rem] text-djati-text border-b border-white/[0.04]">
-                {r.operator}
-              </td>
+                  <tbody>
+                    {isLoadingReports ? (
+                      <tr>
+                        <td
+                          colSpan="6"
+                          className="px-5 py-10 text-center text-white/50"
+                        >
+                          Memuat permintaan jadwal...
+                        </td>
+                      </tr>
+                    ) : requestedRows.length > 0 ? (
+                      requestedRows.map((row) => (
+                        <tr
+                          key={`${row.bookingId || 'booking'}-${row.id}`}
+                          className="border-b border-white/5 transition hover:bg-white/[0.04]"
+                        >
+                          <td className="px-5 py-4">
+                            <div className="min-w-[220px]">
+                              <div className="font-bold text-white">
+                                {row.equip}
+                              </div>
 
-              <td className="px-4 py-3.5 text-[0.84rem] text-djati-text border-b border-white/[0.04]">
-                {formatDate(r.preferredAt)}
-              </td>
+                              <div className="mt-1 text-xs text-white/35">
+                                Nomor Polisi: {row.plateNumber || '-'}
+                              </div>
 
-              <td className="px-4 py-3.5 text-[0.84rem] text-djati-text border-b border-white/[0.04]">
-                {formatDate(r.date)}
-              </td>
+                              <div className="mt-1 text-xs text-white/30">
+                                Booking: #{row.bookingId || '-'} • Laporan: #
+                                {row.damageReportId || '-'}
+                              </div>
+                            </div>
+                          </td>
 
-              <td className="px-4 py-3.5 border-b border-white/[0.04]">
-                <button
-                  disabled={isSubmitting}
-                  onClick={() => openScheduleModal(r)}
-                  className="btn-primary px-4 py-2 text-[0.8rem] whitespace-nowrap disabled:opacity-60 inline-flex items-center gap-1.5"
-                >
-                  <CalendarCheck size={14} />
-                  Schedule
-                </button>
-              </td>
-            </tr>
-          )}
-        />
+                          <td className="px-5 py-4">
+                            <div className="max-w-[300px]">
+                              <p className="line-clamp-2 text-white/65">
+                                {row.desc}
+                              </p>
 
-        {isLoadingReports && (
-          <div className="mt-4 text-sm text-djati-muted">
-            Loading requested bookings...
+                              {row.damageType && row.damageType !== '-' && (
+                                <p className="mt-1 text-xs text-white/35">
+                                  Jenis Kerusakan: {row.damageType}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4 text-white/70">
+                            {row.operator}
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4 text-white/70">
+                            {formatDate(row.preferredAt)}
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4 text-white/70">
+                            {formatDate(row.date)}
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4 text-right">
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              onClick={() => openScheduleModal(row)}
+                              className="inline-flex items-center gap-2 rounded-xl bg-djati-amber px-4 py-2.5 text-xs font-bold text-black transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <CalendarCheck size={14} />
+                              Buat Jadwal
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="6">
+                          <EmptyState
+                            title="Belum ada permintaan jadwal"
+                            description="Permintaan servis dari pengemudi akan tampil di sini."
+                            icon={Truck}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-white/10 px-5 py-4 text-xs text-white/35 md:flex-row md:items-center md:justify-between">
+                <p>
+                  Total {requestedRows.length} permintaan jadwal menunggu admin.
+                </p>
+
+                <p>
+                  Geser tabel ke samping jika kolom tidak muat di layar kecil.
+                </p>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/10 bg-[#171a23]/95 shadow-2xl shadow-black/20">
+              <div className="border-b border-white/10 p-5">
+                <div className="flex flex-col gap-2">
+                  <h2 className="text-lg font-bold text-djati-amber">
+                    Daftar Jadwal Perawatan
+                  </h2>
+
+                  <p className="text-xs leading-5 text-white/40">
+                    Jadwal servis yang sudah disetujui admin dan akan tampil di
+                    aplikasi teknisi. Tabel ini bersifat read-only.
+                  </p>
+                </div>
+              </div>
+
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-[1050px] table-auto text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-[#0f1117]/80 text-xs uppercase tracking-wide text-white/45">
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        ID Jadwal
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Unit / Equipment
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Pengemudi
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Teknisi
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Tanggal Jadwal
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Prioritas
+                      </th>
+                      <th className="whitespace-nowrap px-5 py-4 text-left font-bold">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {isLoadingSchedules ? (
+                      <tr>
+                        <td
+                          colSpan="7"
+                          className="px-5 py-10 text-center text-white/50"
+                        >
+                          Memuat jadwal perawatan...
+                        </td>
+                      </tr>
+                    ) : schedules.length > 0 ? (
+                      schedules.map((schedule) => (
+                        <tr
+                          key={schedule.id}
+                          className="border-b border-white/5 transition hover:bg-white/[0.04]"
+                        >
+                          <td className="whitespace-nowrap px-5 py-4 font-bold text-white/60">
+                            #{schedule.id}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="min-w-[220px]">
+                              <div className="font-bold text-white">
+                                {schedule.equip}
+                              </div>
+
+                              <div className="mt-1 text-xs text-white/35">
+                                Nomor Polisi: {schedule.plateNumber || '-'}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4 text-white/70">
+                            {schedule.driver}
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4 text-white/70">
+                            <span className="inline-flex items-center gap-2">
+                              <Wrench size={14} className="text-djati-amber" />
+                              {schedule.mechanic}
+                            </span>
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4 text-white/70">
+                            {schedule.date}
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4">
+                            <PriorityBadge priority={schedule.priority} />
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4">
+                            <ScheduleStatusBadge status={schedule.status} />
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7">
+                          <EmptyState
+                            title="Belum ada jadwal perawatan aktif"
+                            description="Jadwal yang sudah disetujui admin akan tampil di sini."
+                            icon={CalendarCheck}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-white/10 px-5 py-4 text-xs text-white/35 md:flex-row md:items-center md:justify-between">
+                <p>
+                  Menampilkan {schedules.length} jadwal perawatan.
+                </p>
+
+                <p>
+                  Tampilan tabel mengikuti gaya VehiclePage dengan card gelap dan gradasi.
+                </p>
+              </div>
+            </section>
           </div>
-        )}
-
-        {!isLoadingReports && requestedRows.length === 0 && (
-          <div className="mt-4 text-sm text-djati-muted">
-            Belum ada booking driver yang menunggu jadwal.
-          </div>
-        )}
-      </section>
-
-      <section className="panel p-6">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 className="text-base font-bold text-[#e8e8e8]">
-              Maintenance Schedule List
-            </h2>
-            <p className="text-[0.75rem] text-djati-muted mt-1">
-              Jadwal service yang sudah disetujui admin dan akan tampil di mobile teknisi.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            disabled={isLoading || isSubmitting}
-            onClick={refreshAll}
-            className="text-[0.8rem] font-semibold text-djati-amber hover:underline disabled:opacity-60 flex items-center gap-1.5"
-          >
-            <RefreshCw size={14} />
-            Refresh
-          </button>
         </div>
-
-        <DataTable
-          columns={scheduleColumns}
-          data={schedules}
-          renderRow={(s) => {
-            const isEditDisabled =
-              isSubmitting || !editableStatuses.includes(s.status);
-
-            const isCancelDisabled =
-              isSubmitting || !cancelableStatuses.includes(s.status);
-
-            return (
-              <tr key={s.id} className="table-row-hover">
-                <td className="px-4 py-3.5 font-semibold text-[0.82rem] text-white/60 border-b border-white/[0.04]">
-                  #{s.id}
-                </td>
-
-                <td className="px-4 py-3.5 text-[0.84rem] border-b border-white/[0.04]">
-                  <strong className="text-djati-text-bright font-semibold">
-                    {s.equip}
-                  </strong>
-                  <div className="text-[0.7rem] text-djati-muted mt-1">
-                    Plate: {s.plateNumber || '-'}
-                  </div>
-                </td>
-
-                <td className="px-4 py-3.5 text-[0.84rem] text-djati-text border-b border-white/[0.04]">
-                  {s.driver}
-                </td>
-
-                <td className="px-4 py-3.5 text-[0.84rem] text-djati-text border-b border-white/[0.04]">
-                  {s.mechanic}
-                </td>
-
-                <td className="px-4 py-3.5 text-[0.84rem] text-djati-text border-b border-white/[0.04]">
-                  {s.date}
-                </td>
-
-                <td className="px-4 py-3.5 border-b border-white/[0.04]">
-                  <StatusBadge variant={s.priority}>
-                    {priorityLabels[s.priority] || s.priority || 'Medium'}
-                  </StatusBadge>
-                </td>
-
-                <td className="px-4 py-3.5 border-b border-white/[0.04]">
-                  <StatusBadge variant={s.status}>
-                    {statusLabels[s.status] || s.status}
-                  </StatusBadge>
-                </td>
-
-                <td className="px-4 py-3.5 text-right pr-5 border-b border-white/[0.04]">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <button
-                      className="btn-icon"
-                      title={
-                        isEditDisabled
-                          ? 'Hanya jadwal scheduled/rescheduled yang bisa diedit'
-                          : 'Edit'
-                      }
-                      disabled={isEditDisabled}
-                      onClick={() => openEditModal(s.id)}
-                    >
-                      <Edit size={16} />
-                    </button>
-
-                    <button
-                      className="btn-icon hover:!bg-[rgba(211,47,47,0.12)] hover:!text-status-critical"
-                      title={
-                        isCancelDisabled
-                          ? 'Jadwal ini tidak bisa dibatalkan'
-                          : 'Cancel'
-                      }
-                      disabled={isCancelDisabled}
-                      onClick={() => handleCancelSchedule(s)}
-                    >
-                      <XCircle size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          }}
-        />
-
-        {isLoadingSchedules && (
-          <div className="mt-4 text-sm text-djati-muted">
-            Loading schedules...
-          </div>
-        )}
-
-        {!isLoadingSchedules && schedules.length === 0 && (
-          <div className="mt-4 text-sm text-djati-muted">
-            Belum ada jadwal maintenance aktif.
-          </div>
-        )}
-      </section>
+      </main>
 
       {showSchedule && (
         <ScheduleModal
@@ -947,14 +1057,6 @@ export default function MaintenanceScheduling() {
           onConfirm={confirmSchedule}
         />
       )}
-
-      {editData && (
-        <EditScheduleModal
-          data={editData}
-          onClose={() => setEditData(null)}
-          onSave={saveEdit}
-        />
-      )}
-    </DashboardLayout>
+    </div>
   );
 }

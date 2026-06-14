@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  RefreshCw,
   TrendingUp,
   TrendingDown,
   Wallet,
@@ -49,37 +48,161 @@ function formatDate(value) {
   });
 }
 
-function getErrorMessage(error, fallback) {
+function getFriendlyErrorMessage(error, fallback) {
+  const serverMessage = error?.response?.data?.message;
+
+  if (
+    serverMessage &&
+    !String(serverMessage).toLowerCase().includes("localhost") &&
+    !String(serverMessage).toLowerCase().includes("127.0.0.1") &&
+    !String(serverMessage).toLowerCase().includes("endpoint") &&
+    !String(serverMessage).toLowerCase().includes("network error") &&
+    !String(serverMessage).toLowerCase().includes("request failed")
+  ) {
+    return serverMessage;
+  }
+
+  return fallback;
+}
+
+function getSourceLabel(source) {
+  const labels = {
+    manual: "Manual",
+    repair: "Perbaikan",
+    inventory: "Catatan / Suku Cadang",
+  };
+
+  return labels[source] || source || "-";
+}
+
+function getTypeLabel(type) {
+  if (type === "income") return "Dana Masuk";
+  if (type === "expense") return "Biaya Keluar";
+  return type || "-";
+}
+
+function NotificationToast({ notification, onClose }) {
+  if (!notification) return null;
+
+  const styleClass =
+    notification.type === "success"
+      ? "border-green-500/40 bg-green-500/10 text-green-400"
+      : notification.type === "warning"
+      ? "border-djati-amber/40 bg-djati-amber/10 text-djati-amber"
+      : "border-red-500/40 bg-red-500/10 text-red-400";
+
+  const title =
+    notification.type === "success"
+      ? "Berhasil"
+      : notification.type === "warning"
+      ? "Perhatian"
+      : "Terjadi Kendala";
+
   return (
-    error?.response?.data?.message ||
-    error?.message ||
-    fallback
+    <div className="fixed top-5 right-5 z-[9999] w-[340px] max-w-[calc(100vw-2rem)]">
+      <div
+        className={`rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur bg-[#171a23] ${styleClass}`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-bold">{title}</h4>
+            <p className="text-xs leading-relaxed mt-1 opacity-90">
+              {notification.message}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-lg leading-none opacity-70 hover:opacity-100"
+            aria-label="Tutup notifikasi"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function SummaryCard({ title, value, icon: Icon, tone = "amber" }) {
-  const toneClass =
-    tone === "green"
-      ? "text-green-400 bg-green-500/10"
-      : tone === "red"
-      ? "text-red-400 bg-red-500/10"
-      : "text-djati-amber bg-djati-amber/10";
+function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmText = "Ya, Lanjutkan",
+  cancelText = "Batal",
+  loading = false,
+  onConfirm,
+  onCancel,
+}) {
+  if (!open) return null;
 
   return (
-    <div className="bg-[#1E1E1E] border border-white/10 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-white/45 text-[0.78rem] font-semibold uppercase tracking-wide">
-          {title}
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#171a23] p-5 shadow-2xl">
+        <h3 className="text-lg font-bold text-djati-amber">{title}</h3>
+
+        <p className="text-sm text-white/60 leading-relaxed mt-2">
+          {message}
         </p>
 
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${toneClass}`}>
-          <Icon size={18} />
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl border border-white/10 text-white/70 hover:bg-white/5 text-sm font-bold disabled:opacity-50"
+          >
+            {cancelText}
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl border border-red-500/40 text-red-400 hover:bg-red-500/10 text-sm font-bold disabled:opacity-50"
+          >
+            {loading ? "Memproses..." : confirmText}
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <h3 className="text-2xl font-extrabold text-white">
-        Rp {formatCurrency(value)}
-      </h3>
+function SummaryCard({ title, value, icon: Icon, tone = "amber", description }) {
+  const toneClass =
+    tone === "green"
+      ? "text-green-400 bg-green-500/10 border-green-500/20"
+      : tone === "red"
+      ? "text-red-400 bg-red-500/10 border-red-500/20"
+      : "text-djati-amber bg-djati-amber/10 border-djati-amber/20";
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl shadow-black/10">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-white/45 text-[0.72rem] font-bold uppercase tracking-[0.12em]">
+            {title}
+          </p>
+
+          <h3 className="text-2xl font-extrabold text-white mt-2">
+            Rp {formatCurrency(value)}
+          </h3>
+
+          {description && (
+            <p className="text-xs text-white/35 mt-2 leading-relaxed">
+              {description}
+            </p>
+          )}
+        </div>
+
+        <div
+          className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${toneClass}`}
+        >
+          <Icon size={19} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -90,6 +213,8 @@ export default function FinanceTransactionsPage() {
   const [sourceFilter, setSourceFilter] = useState("");
 
   const [transactions, setTransactions] = useState([]);
+  const [summaryTransactions, setSummaryTransactions] = useState([]);
+
   const [loading, setLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState("");
 
@@ -99,31 +224,61 @@ export default function FinanceTransactionsPage() {
   const [note, setNote] = useState("");
   const [editingId, setEditingId] = useState(null);
 
-  const [message, setMessage] = useState("");
+  const [notification, setNotification] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const loadTransactions = async () => {
+  const showNotification = (type, message) => {
+    setNotification({
+      type,
+      message,
+    });
+  };
+
+  useEffect(() => {
+    if (!notification) return;
+
+    const timer = setTimeout(() => {
+      setNotification(null);
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [notification]);
+
+  const loadTransactions = async (override = {}) => {
+    const activeMonth = override.month ?? month;
+    const activeType = override.type ?? typeFilter;
+    const activeSource = override.source ?? sourceFilter;
+
     try {
       setLoading(true);
-      setMessage("");
 
-      const data = await getFinanceTransactionsApi({
-        month,
-        type: typeFilter,
-        source: sourceFilter,
-      });
+      const [tableData, summaryData] = await Promise.all([
+        getFinanceTransactionsApi({
+          month: activeMonth,
+          type: activeType,
+          source: activeSource,
+        }),
 
-      setTransactions(Array.isArray(data) ? data : []);
+        getFinanceTransactionsApi({
+          month: activeMonth,
+        }),
+      ]);
+
+      setTransactions(Array.isArray(tableData) ? tableData : []);
+      setSummaryTransactions(Array.isArray(summaryData) ? summaryData : []);
     } catch (error) {
-      console.error("LOAD FINANCE TRANSACTIONS ERROR:", error);
+      console.error("GAGAL MENGAMBIL DATA DANA PERBAIKAN:", error);
 
-      setMessage(
-        `❌ ${getErrorMessage(
+      showNotification(
+        "error",
+        getFriendlyErrorMessage(
           error,
-          "Gagal mengambil data transaksi."
-        )}`
+          "Data dana perbaikan belum dapat dimuat. Periksa koneksi atau coba beberapa saat lagi."
+        )
       );
 
       setTransactions([]);
+      setSummaryTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -131,29 +286,24 @@ export default function FinanceTransactionsPage() {
 
   useEffect(() => {
     loadTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, typeFilter, sourceFilter]);
 
   const summary = useMemo(() => {
-    const income = transactions
+    const danaMasuk = summaryTransactions
       .filter((item) => item.type === "income")
-      .reduce(
-        (total, item) => total + Number(item.amount || 0),
-        0
-      );
+      .reduce((total, item) => total + Number(item.amount || 0), 0);
 
-    const expense = transactions
+    const biayaKeluar = summaryTransactions
       .filter((item) => item.type === "expense")
-      .reduce(
-        (total, item) => total + Number(item.amount || 0),
-        0
-      );
+      .reduce((total, item) => total + Number(item.amount || 0), 0);
 
     return {
-      income,
-      expense,
-      net: income - expense,
+      danaMasuk,
+      biayaKeluar,
+      sisaDana: danaMasuk - biayaKeluar,
     };
-  }, [transactions]);
+  }, [summaryTransactions]);
 
   const resetForm = () => {
     setCategory("");
@@ -167,13 +317,17 @@ export default function FinanceTransactionsPage() {
     event.preventDefault();
 
     if (!category || !amount || !date) {
-      setMessage("❌ Category, nominal, dan tanggal wajib diisi.");
+      showNotification(
+        "warning",
+        "Kategori dana, nominal, dan tanggal wajib diisi."
+      );
       return;
     }
 
     try {
       setLoading(true);
-      setMessage("");
+
+      const selectedMonth = String(date).slice(0, 7);
 
       if (editingId) {
         await updateFinanceTransactionApi(editingId, {
@@ -183,7 +337,7 @@ export default function FinanceTransactionsPage() {
           note,
         });
 
-        setMessage("✅ Income berhasil diupdate.");
+        showNotification("success", "Dana masuk berhasil diperbarui.");
       } else {
         await createFinanceTransactionApi({
           type: "income",
@@ -194,19 +348,29 @@ export default function FinanceTransactionsPage() {
           source: "manual",
         });
 
-        setMessage("✅ Income berhasil ditambahkan.");
+        showNotification("success", "Dana masuk berhasil ditambahkan.");
       }
 
       resetForm();
-      await loadTransactions();
-    } catch (error) {
-      console.error("SAVE FINANCE TRANSACTION ERROR:", error);
 
-      setMessage(
-        `❌ ${getErrorMessage(
+      setMonth(selectedMonth);
+      setTypeFilter("");
+      setSourceFilter("");
+
+      await loadTransactions({
+        month: selectedMonth,
+        type: "",
+        source: "",
+      });
+    } catch (error) {
+      console.error("GAGAL MENYIMPAN DANA MASUK:", error);
+
+      showNotification(
+        "error",
+        getFriendlyErrorMessage(
           error,
-          "Gagal menyimpan transaksi."
-        )}`
+          "Dana masuk belum dapat disimpan. Periksa kembali data yang diisi."
+        )
       );
     } finally {
       setLoading(false);
@@ -223,34 +387,45 @@ export default function FinanceTransactionsPage() {
     setAmount(String(Number(transaction.amount || 0)));
     setDate(String(transaction.date || getTodayDate()).slice(0, 10));
     setNote(transaction.note || "");
-    setMessage("");
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
-  const handleDelete = async (transaction) => {
+  const handleDelete = (transaction) => {
     if (transaction.type !== "income" || transaction.locked) {
       return;
     }
 
-    if (!window.confirm("Hapus income ini?")) {
+    setDeleteTarget(transaction);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget?.id) {
+      showNotification("warning", "Data dana masuk tidak ditemukan.");
       return;
     }
 
     try {
-      setActionLoadingId(`delete-${transaction.id}`);
-      setMessage("");
+      setActionLoadingId(`delete-${deleteTarget.id}`);
 
-      await deleteFinanceTransactionApi(transaction.id);
+      await deleteFinanceTransactionApi(deleteTarget.id);
 
-      setMessage("✅ Income berhasil dihapus.");
+      showNotification("success", "Dana masuk berhasil dihapus.");
+      setDeleteTarget(null);
+
       await loadTransactions();
     } catch (error) {
-      console.error("DELETE FINANCE TRANSACTION ERROR:", error);
+      console.error("GAGAL MENGHAPUS DANA MASUK:", error);
 
-      setMessage(
-        `❌ ${getErrorMessage(
+      showNotification(
+        "error",
+        getFriendlyErrorMessage(
           error,
-          "Gagal menghapus transaksi."
-        )}`
+          "Dana masuk belum dapat dihapus. Silakan coba kembali."
+        )
       );
     } finally {
       setActionLoadingId("");
@@ -260,112 +435,113 @@ export default function FinanceTransactionsPage() {
   const isEditing = Boolean(editingId);
 
   return (
-    <div className="flex min-h-screen bg-[#121212]">
+    <div className="flex min-h-screen bg-[#0f1117] text-white">
       <Sidebar />
 
-      <main className="flex-1 p-6 text-white overflow-x-hidden">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-djati-amber">
-              Finance Transactions
-            </h1>
+      <NotificationToast
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
 
-            <p className="text-sm text-white/45 mt-1">
-              Kelola income manual dan lihat expense otomatis dari repair atau inventory.
-            </p>
-          </div>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Hapus Dana Masuk"
+        message="Apakah Anda yakin ingin menghapus data dana masuk ini? Data yang sudah dihapus tidak dapat dikembalikan."
+        confirmText="Ya, Hapus"
+        cancelText="Batal"
+        loading={Boolean(actionLoadingId)}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
-          <button
-            type="button"
-            onClick={loadTransactions}
-            disabled={loading}
-            className="flex items-center gap-2 bg-djati-amber text-black font-bold rounded-lg px-4 py-2 disabled:opacity-50"
-          >
-            <RefreshCw
-              size={16}
-              className={loading ? "animate-spin" : ""}
-            />
-            Refresh
-          </button>
-        </div>
+      <main className="min-w-0 flex-1 overflow-x-hidden">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.16),transparent_35%),radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_30%)] p-5 md:p-7">
+          <div className="mx-auto max-w-[1600px]">
+            <div className="mb-6 rounded-3xl border border-white/10 bg-gradient-to-br from-[#1f1f1f]/95 to-[#171717]/95 p-6 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+              <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-djati-amber/80">
+                FINANCE MONITORING
+              </p>
 
-        {message && (
-          <div
-            className={`mb-5 rounded-lg border px-4 py-3 text-sm font-semibold ${
-              message.startsWith("✅")
-                ? "border-green-500/40 bg-green-500/10 text-green-400"
-                : "border-red-500/40 bg-red-500/10 text-red-400"
-            }`}
-          >
-            {message}
-          </div>
-        )}
+              <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-3xl">
+                Dana Perbaikan Bengkel
+              </h1>
+
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-white/45">
+                Kelola alokasi dana perbaikan, reimburse operasional, serta
+                biaya keluar otomatis dari aktivitas perbaikan dan inventaris.
+              </p>
+            </div>
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <SummaryCard
-            title="Income"
-            value={summary.income}
+            title="Dana Masuk"
+            value={summary.danaMasuk}
             icon={TrendingUp}
             tone="green"
+            description="Alokasi atau reimburse manual dari perusahaan."
           />
 
           <SummaryCard
-            title="Expense"
-            value={summary.expense}
+            title="Biaya Keluar"
+            value={summary.biayaKeluar}
             icon={TrendingDown}
             tone="red"
+            description="Biaya otomatis dari perbaikan dan pemakaian sparepart."
           />
 
           <SummaryCard
-            title="Net"
-            value={summary.net}
+            title="Sisa Dana"
+            value={summary.sisaDana}
             icon={Wallet}
             tone="amber"
+            description="Selisih antara dana masuk dan biaya perbaikan."
           />
         </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6">
-          <div className="bg-[#1E1E1E] border border-white/10 rounded-xl p-5 h-fit">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="text-lg font-bold text-djati-amber">
-                  {isEditing ? "Edit Income" : "Input Income"}
-                </h2>
+        <section className="mb-6 rounded-2xl border border-white/10 bg-[#171a23]/95 p-5 shadow-2xl shadow-black/20">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5">
+            <div>
+              <h2 className="text-lg font-bold text-djati-amber">
+                {isEditing ? "Edit Dana Masuk" : "Input Dana Masuk"}
+              </h2>
 
-                <p className="text-xs text-white/40 mt-1">
-                  Hanya income manual yang bisa ditambah, diedit, dan dihapus.
-                </p>
-              </div>
-
-              {isEditing && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60"
-                >
-                  <X size={16} />
-                </button>
-              )}
+              <p className="text-xs text-white/40 mt-1 max-w-2xl">
+                Dana masuk manual berasal dari alokasi dana perbaikan,
+                reimburse, atau kas operasional bengkel.
+              </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="grid gap-4">
+            {isEditing && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-white/60 hover:bg-white/5 text-xs font-bold w-fit"
+              >
+                <X size={14} />
+                Batal Edit
+              </button>
+            )}
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs font-bold text-white/50 mb-2 uppercase">
-                  Category
+                <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
+                  Kategori Dana
                 </label>
 
                 <input
                   value={category}
                   onChange={(event) => setCategory(event.target.value)}
-                  placeholder="Dana Operasional / Reimburse"
-                  className="w-full bg-[#121212] border border-white/10 rounded-lg px-3 py-3 text-sm text-white outline-none focus:border-djati-amber"
+                  placeholder="Contoh: Alokasi Dana Perbaikan"
+                  className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-white/50 mb-2 uppercase">
-                  Amount
+                <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
+                  Nominal Dana
                 </label>
 
                 <input
@@ -374,232 +550,238 @@ export default function FinanceTransactionsPage() {
                   step="0.01"
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
-                  placeholder="Nominal"
-                  className="w-full bg-[#121212] border border-white/10 rounded-lg px-3 py-3 text-sm text-white outline-none focus:border-djati-amber"
+                  placeholder="Masukkan nominal"
+                  className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-white/50 mb-2 uppercase">
-                  Date
+                <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
+                  Tanggal
                 </label>
 
                 <input
                   type="date"
                   value={date}
                   onChange={(event) => setDate(event.target.value)}
-                  className="w-full bg-[#121212] border border-white/10 rounded-lg px-3 py-3 text-sm text-white outline-none focus:border-djati-amber"
+                  className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-white/50 mb-2 uppercase">
-                  Note
+                <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
+                  Catatan
                 </label>
 
-                <textarea
+                <input
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
-                  placeholder="Catatan"
-                  rows="3"
-                  className="w-full bg-[#121212] border border-white/10 rounded-lg px-3 py-3 text-sm text-white outline-none focus:border-djati-amber resize-none"
+                  placeholder="Catatan opsional"
+                  className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
                 />
               </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-5">
+              <p className="text-xs text-white/35">
+                Biaya keluar dari perbaikan dan inventaris tetap tercatat
+                otomatis, sehingga tidak perlu diinput manual.
+              </p>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-djati-amber text-black font-bold rounded-lg px-4 py-3 disabled:opacity-50"
+                className="bg-djati-amber text-black font-bold rounded-xl px-5 py-3 disabled:opacity-50 min-w-[190px]"
               >
                 {loading
-                  ? "Saving..."
+                  ? "Menyimpan..."
                   : isEditing
-                  ? "Update Income"
-                  : "Simpan Income"}
+                  ? "Perbarui Dana Masuk"
+                  : "Simpan Dana Masuk"}
               </button>
-            </form>
+            </div>
+          </form>
+        </section>
+
+        <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#171a23]/95 p-5 shadow-2xl shadow-black/20">
+          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-5">
+            <div>
+              <h2 className="text-lg font-bold text-djati-amber">
+                Laporan Dana Perbaikan
+              </h2>
+
+              <p className="text-xs text-white/40 mt-1 max-w-2xl">
+                Menampilkan riwayat dana masuk dan biaya keluar. Biaya otomatis
+                dari perbaikan dan inventaris tidak bisa diedit atau dihapus.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full xl:w-auto">
+              <input
+                type="month"
+                value={month}
+                onChange={(event) => setMonth(event.target.value)}
+                className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+              />
+
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+                className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+              >
+                <option value="">Semua Jenis</option>
+                <option value="income">Dana Masuk</option>
+                <option value="expense">Biaya Keluar</option>
+              </select>
+
+              <select
+                value={sourceFilter}
+                onChange={(event) => setSourceFilter(event.target.value)}
+                className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+              >
+                <option value="">Semua Sumber</option>
+                <option value="manual">Manual</option>
+                <option value="repair">Perbaikan</option>
+                <option value="inventory">Inventaris</option>
+              </select>
+            </div>
           </div>
 
-          <div className="bg-[#1E1E1E] border border-white/10 rounded-xl p-5 overflow-hidden">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
-              <div>
-                <h2 className="text-lg font-bold text-djati-amber">
-                  Transaction Report
-                </h2>
-
-                <p className="text-xs text-white/40 mt-1">
-                  Expense bersifat otomatis dan tidak bisa diedit atau dihapus.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input
-                  type="month"
-                  value={month}
-                  onChange={(event) => setMonth(event.target.value)}
-                  className="bg-[#121212] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-djati-amber"
-                />
-
-                <select
-                  value={typeFilter}
-                  onChange={(event) => setTypeFilter(event.target.value)}
-                  className="bg-[#121212] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-djati-amber"
-                >
-                  <option value="">All Type</option>
-                  <option value="income">Income</option>
-                  <option value="expense">Expense</option>
-                </select>
-
-                <select
-                  value={sourceFilter}
-                  onChange={(event) => setSourceFilter(event.target.value)}
-                  className="bg-[#121212] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-djati-amber"
-                >
-                  <option value="">All Source</option>
-                  <option value="manual">Manual</option>
-                  <option value="repair">Repair</option>
-                  <option value="inventory">Inventory</option>
-                </select>
-              </div>
+          {typeFilter || sourceFilter ? (
+            <div className="mb-4 rounded-xl border border-djati-amber/25 bg-djati-amber/10 px-4 py-3 text-xs text-djati-amber">
+              Tabel sedang difilter. Ringkasan di atas tetap menghitung semua
+              dana pada bulan yang dipilih.
             </div>
+          ) : null}
 
-            <div className="overflow-x-auto rounded-xl border border-white/10">
-              <table className="w-full text-sm">
-                <thead className="bg-djati-amber text-black">
-                  <tr>
-                    <th className="p-4 text-left font-bold">Tanggal</th>
-                    <th className="p-4 text-left font-bold">Type</th>
-                    <th className="p-4 text-left font-bold">Kategori</th>
-                    <th className="p-4 text-left font-bold">Nominal</th>
-                    <th className="p-4 text-left font-bold">Source</th>
-                    <th className="p-4 text-left font-bold">Note / Ref</th>
-                    <th className="p-4 text-left font-bold">Aksi</th>
-                  </tr>
-                </thead>
+          <div className="overflow-x-auto rounded-2xl border border-white/10">
+            <table className="w-full text-sm min-w-[980px]">
+              <thead className="bg-djati-amber text-black">
+                <tr>
+                  <th className="p-4 text-left font-bold">Tanggal</th>
+                  <th className="p-4 text-left font-bold">Jenis</th>
+                  <th className="p-4 text-left font-bold">Kategori</th>
+                  <th className="p-4 text-left font-bold">Nominal</th>
+                  <th className="p-4 text-left font-bold">Sumber</th>
+                  <th className="p-4 text-left font-bold">Catatan / Ref</th>
+                  <th className="p-4 text-left font-bold">Aksi</th>
+                </tr>
+              </thead>
 
-                <tbody>
-                  {transactions.map((transaction) => {
-                    const canModify =
-                      transaction.type === "income" &&
-                      !transaction.locked;
+              <tbody>
+                {transactions.map((transaction) => {
+                  const isDanaMasuk = transaction.type === "income";
+                  const canModify = isDanaMasuk && !transaction.locked;
 
-                    return (
-                      <tr
-                        key={transaction.id}
-                        className="border-t border-white/10 hover:bg-white/[0.03]"
-                      >
-                        <td className="p-4 text-white/80">
-                          {formatDate(transaction.date)}
-                        </td>
+                  return (
+                    <tr
+                      key={transaction.id}
+                      className="border-t border-white/10 hover:bg-white/[0.03]"
+                    >
+                      <td className="p-4 text-white/80 whitespace-nowrap">
+                        {formatDate(transaction.date)}
+                      </td>
 
-                        <td className="p-4">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[0.68rem] font-bold uppercase ${
-                              transaction.type === "income"
-                                ? "bg-green-500/10 text-green-400 border border-green-500/20"
-                                : "bg-red-500/10 text-red-400 border border-red-500/20"
-                            }`}
-                          >
-                            {transaction.type}
-                            {transaction.type === "expense" && " AUTO"}
-                          </span>
-                        </td>
+                      <td className="p-4">
+                        <span
+                          className={`inline-flex items-center px-3 py-1.5 rounded-full text-[0.68rem] font-bold uppercase border ${
+                            isDanaMasuk
+                              ? "bg-green-500/10 text-green-400 border-green-500/25"
+                              : "bg-red-500/10 text-red-400 border-red-500/25"
+                          }`}
+                        >
+                          {getTypeLabel(transaction.type)}
+                          {!isDanaMasuk ? " Otomatis" : ""}
+                        </span>
+                      </td>
 
-                        <td className="p-4">
-                          <div className="font-semibold text-white">
-                            {transaction.category || "-"}
-                          </div>
+                      <td className="p-4">
+                        <div className="font-semibold text-white">
+                          {transaction.category || "-"}
+                        </div>
 
+                        <div className="text-xs text-white/35 mt-1">
+                          {transaction.locked ? "Terkunci / Otomatis" : "Manual"}
+                        </div>
+                      </td>
+
+                      <td className="p-4 font-bold text-djati-amber whitespace-nowrap">
+                        Rp {formatCurrency(transaction.amount)}
+                      </td>
+
+                      <td className="p-4 text-white/70">
+                        {getSourceLabel(transaction.source)}
+                      </td>
+
+                      <td className="p-4 max-w-[320px]">
+                        <div className="text-white/70 line-clamp-2">
+                          {transaction.note || "-"}
+                        </div>
+
+                        {transaction.ref && (
                           <div className="text-xs text-white/35 mt-1">
-                            {transaction.locked
-                              ? "Locked / automatic"
-                              : "Manual"}
+                            Referensi: {transaction.ref}
                           </div>
-                        </td>
+                        )}
+                      </td>
 
-                        <td className="p-4 font-bold text-djati-amber">
-                          Rp {formatCurrency(transaction.amount)}
-                        </td>
+                      <td className="p-4">
+                        {canModify ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(transaction)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-djati-amber/40 text-djati-amber hover:bg-djati-amber/10 text-xs font-bold"
+                            >
+                              <Pencil size={13} />
+                              Edit
+                            </button>
 
-                        <td className="p-4 text-white/70 capitalize">
-                          {transaction.source || "-"}
-                        </td>
-
-                        <td className="p-4 max-w-[260px]">
-                          <div className="text-white/70 line-clamp-2">
-                            {transaction.note || "-"}
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(transaction)}
+                              disabled={
+                                actionLoadingId === `delete-${transaction.id}`
+                              }
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs font-bold disabled:opacity-50"
+                            >
+                              <Trash2 size={13} />
+                              Hapus
+                            </button>
                           </div>
-
-                          {transaction.ref && (
-                            <div className="text-xs text-white/35 mt-1">
-                              Ref: {transaction.ref}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="p-4">
-                          {canModify ? (
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleEdit(transaction)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-djati-amber/40 text-djati-amber hover:bg-djati-amber/10 text-xs font-bold"
-                              >
-                                <Pencil size={13} />
-                                Edit
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(transaction)}
-                                disabled={
-                                  actionLoadingId ===
-                                  `delete-${transaction.id}`
-                                }
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs font-bold disabled:opacity-50"
-                              >
-                                <Trash2 size={13} />
-                                Hapus
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-white/35">
-                              Readonly
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {!transactions.length && !loading && (
-                    <tr>
-                      <td
-                        colSpan="7"
-                        className="p-6 text-center text-white/50"
-                      >
-                        Tidak ada data transaksi.
+                        ) : (
+                          <span className="text-xs text-white/35">
+                            Otomatis
+                          </span>
+                        )}
                       </td>
                     </tr>
-                  )}
+                  );
+                })}
 
-                  {loading && !transactions.length && (
-                    <tr>
-                      <td
-                        colSpan="7"
-                        className="p-6 text-center text-white/50"
-                      >
-                        Loading transaksi...
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                {!transactions.length && !loading && (
+                  <tr>
+                    <td colSpan="7" className="p-6 text-center text-white/50">
+                      Tidak ada data dana perbaikan.
+                    </td>
+                  </tr>
+                )}
+
+                {loading && (
+                  <tr>
+                    <td colSpan="7" className="p-6 text-center text-white/50">
+                      Memuat data dana perbaikan...
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
+          </div>
+        </div>
       </main>
     </div>
   );

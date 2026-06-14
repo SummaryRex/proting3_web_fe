@@ -328,6 +328,37 @@ export const logoutApi =
  * ===============================
  */
 
+/**
+ * Penyesuaian khusus masalah INITIAL.
+ *
+ * Frontend VehiclesPage.jsx memakai:
+ * - initial_hour_meter
+ *
+ * Backend lama masih memakai:
+ * - initial_kpi
+ *
+ * Jadi sebelum CREATE / UPDATE kendaraan,
+ * initial_hour_meter akan dipetakan ke initial_kpi.
+ *
+ * Struktur data lain tidak diubah.
+ */
+const normalizeVehicleInitialPayload = (
+  data = {}
+) => {
+  const initialValue =
+    data.initial_kpi ??
+    data.initial_hour_meter ??
+    data.kpi_awal ??
+    data.initial_km ??
+    data.km_awal ??
+    "";
+
+  return {
+    ...data,
+    initial_kpi: initialValue,
+  };
+};
+
 // GET ALL VEHICLES
 
 export const getVehicles =
@@ -344,10 +375,15 @@ export const getVehicles =
 
 export const createVehicle =
   async (data) => {
+    const payload =
+      normalizeVehicleInitialPayload(
+        data
+      );
+
     const res =
       await api.post(
         "/admin/vehicles",
-        data
+        payload
       );
 
     return res.data;
@@ -360,10 +396,15 @@ export const updateVehicle =
     id,
     data
   ) => {
+    const payload =
+      normalizeVehicleInitialPayload(
+        data
+      );
+
     const res =
       await api.put(
         `/admin/vehicles/${id}`,
-        data
+        payload
       );
 
     return res.data;
@@ -789,4 +830,4 @@ export const deleteFinanceTransactionApi =
  * ===============================
  */
 
-export default api; 
+export default api;

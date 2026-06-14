@@ -2,7 +2,26 @@ import api from "./api";
 
 /**
  * ===============================
- * VEHICLE ASSIGNMENT SERVICE (ADMIN)
+ * VEHICLE ASSIGNMENT SERVICE
+ * ===============================
+ *
+ * Digunakan untuk:
+ * - Admin melihat semua penempatan kendaraan
+ * - Admin assign kendaraan ke driver
+ * - Admin unassign kendaraan dari driver
+ * - Driver melihat kendaraan miliknya
+ *
+ * Catatan penting:
+ * Jangan throw error.response.data secara langsung,
+ * karena VehicleAssignmentsPage.jsx membutuhkan struktur Axios error:
+ * error.response.status
+ * error.response.data.message
+ * error.response.data.errors
+ */
+
+/**
+ * ===============================
+ * HELPER
  * ===============================
  */
 
@@ -10,7 +29,7 @@ const unwrapList = (payload) => {
   if (Array.isArray(payload)) {
     return payload;
   }
-  
+
   if (Array.isArray(payload?.data)) {
     return payload.data;
   }
@@ -30,51 +49,116 @@ const unwrapItem = (payload) => {
   return payload;
 };
 
-// GET semua assignment
+const normalizeAssignmentPayload = (data = {}) => {
+  return {
+    vehicle_id: Number(data.vehicle_id),
+    driver_id: Number(data.driver_id),
+  };
+};
+
+const handleServiceError = (label, error) => {
+  console.error(label, {
+    status: error?.response?.status || "NO_RESPONSE",
+    data: error?.response?.data || null,
+    message: error?.message || "Unknown error",
+  });
+
+  /**
+   * Penting:
+   * Lempar error asli dari Axios agar page bisa membaca:
+   * error.response.status
+   * error.response.data.message
+   */
+  throw error;
+};
+
+/**
+ * ===============================
+ * GET SEMUA ASSIGNMENT
+ * ===============================
+ *
+ * Backend:
+ * GET /api/admin/vehicle-assignments
+ */
+
 export const getAssignments = async () => {
   try {
     const res = await api.get("/admin/vehicle-assignments");
 
-    console.log("VEHICLE ASSIGNMENTS RAW:", res.data);
-
     return unwrapList(res.data);
   } catch (error) {
-    console.error("GET ASSIGNMENTS ERROR:", error.response || error);
-    throw error.response?.data || error.message;
+    handleServiceError("GET ASSIGNMENTS ERROR:", error);
   }
 };
 
-// CREATE assignment
+/**
+ * ===============================
+ * CREATE ASSIGNMENT
+ * ===============================
+ *
+ * Backend:
+ * POST /api/admin/vehicle-assignments
+ *
+ * Payload:
+ * {
+ *   vehicle_id: 1,
+ *   driver_id: 2
+ * }
+ */
+
 export const createAssignment = async (data) => {
   try {
-    const res = await api.post("/admin/vehicle-assignments", {
-      vehicle_id: data.vehicle_id,
-      driver_id: data.driver_id,
-    });
+    const payload = normalizeAssignmentPayload(data);
 
-    console.log("CREATE ASSIGNMENT RAW:", res.data);
+    const res = await api.post("/admin/vehicle-assignments", payload);
 
     return unwrapItem(res.data);
   } catch (error) {
-    console.error("CREATE ASSIGNMENT ERROR:", error.response || error);
-    throw error.response?.data || error.message;
+    handleServiceError("CREATE ASSIGNMENT ERROR:", error);
   }
 };
 
-// DELETE assignment
+/**
+ * ===============================
+ * DELETE / UNASSIGN ASSIGNMENT
+ * ===============================
+ *
+ * Backend:
+ * DELETE /api/admin/vehicle-assignments/{id}
+ */
+
 export const deleteAssignment = async (id) => {
   try {
     if (!id) {
-      throw new Error("ID assignment tidak valid");
+      throw new Error("ID assignment tidak valid.");
     }
 
     const res = await api.delete(`/admin/vehicle-assignments/${id}`);
 
-    console.log("DELETE ASSIGNMENT RAW:", res.data);
-
     return res.data;
   } catch (error) {
-    console.error("DELETE ASSIGNMENT ERROR:", error.response || error);
-    throw error.response?.data || error.message;
+    handleServiceError("DELETE ASSIGNMENT ERROR:", error);
+  }
+};
+
+/**
+ * ===============================
+ * DRIVER - GET MY VEHICLE
+ * ===============================
+ *
+ * Backend:
+ * GET /api/driver/my-vehicle
+ *
+ * Dipakai jika halaman driver ingin melihat kendaraan
+ * yang sedang di-assign ke dirinya.
+ */
+
+export const getMyVehicleAssignment = async () => {
+  try {
+    const res = await api.get("/driver/my-vehicle");
+
+    return unwrapItem(res.data);
+  } catch (error) {
+    handleServiceError("GET MY VEHICLE ASSIGNMENT ERROR:", error);
   }
 };

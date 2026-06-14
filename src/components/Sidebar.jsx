@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   AlertTriangle,
   Calendar,
-  DollarSign,
   Users,
   LogOut,
   Truck,
@@ -18,7 +17,7 @@ import iconImg from "../assets/Icon.png";
 
 const navSections = [
   {
-    title: "Main",
+    title: "Utama",
     items: [
       {
         label: "Dashboard",
@@ -28,61 +27,90 @@ const navSections = [
     ],
   },
   {
-    title: "Operations",
+    title: "Operasional",
     items: [
       {
-        label: "Damage Reports",
+        label: "Laporan Kerusakan",
         route: "/damage-reports",
         icon: AlertTriangle,
       },
       {
-        label: "Vehicles",
+        label: "Kendaraan",
         route: "/vehicles",
         icon: Truck,
       },
       {
-        label: "Vehicle Assignment",
+        label: "Penugasan Kendaraan",
         route: "/vehicle-assignments",
         icon: Users,
       },
       {
-        label: "Maintenance Scheduling",
+        label: "Jadwal Perawatan",
         route: "/maintenance-scheduling",
         icon: Calendar,
       },
     ],
   },
   {
-    title: "Inventory",
+    title: "Inventaris",
     items: [
       {
-        label: "Sparepart Inventory",
+        label: "Suku Cadang",
         route: "/inventory",
         icon: Package,
       },
     ],
   },
   {
-    title: "Finance",
+    title: "Keuangan",
     items: [
       {
-        label: "Finance Transactions",
+        label: "Transaksi Keuangan",
         route: "/finance-transactions",
         icon: ClipboardList,
       },
     ],
   },
   {
-    title: "System",
+    title: "Sistem",
     items: [
       {
-        label: "User Management",
+        label: "Manajemen Pengguna",
         route: "/user-management",
         icon: Users,
       },
     ],
   },
 ];
+
+function getRoleLabel(role) {
+  const normalizedRole = String(role || "").toLowerCase();
+
+  const labels = {
+    admin: "Admin",
+    superadmin: "Super Admin",
+    driver: "Pengemudi",
+    technician: "Teknisi",
+    mechanic: "Teknisi",
+    user: "Pengguna",
+    guest: "Tamu",
+  };
+
+  return labels[normalizedRole] || role || "Tamu";
+}
+
+function getInitials(name) {
+  if (!name) return "U";
+
+  return String(name)
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -110,26 +138,17 @@ export default function Sidebar() {
     );
   };
 
-  const userName = user?.name || user?.username || "User";
-  const userRole = user?.role || "Guest";
-
-  const userInitials =
-    user?.initials ||
-    userName
-      .split(" ")
-      .map((word) => word.charAt(0))
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
+  const userName = user?.name || user?.username || "Pengguna";
+  const userRole = getRoleLabel(user?.role);
+  const userInitials = user?.initials || getInitials(userName);
 
   return (
     <>
       <aside className="w-[220px] min-w-[220px] bg-djati-sidebar border-r border-white/[0.06] p-[1.4rem_1rem] flex flex-col gap-2.5 sticky top-0 h-screen overflow-y-auto box-border">
-        {/* Brand */}
         <div className="flex items-center gap-2.5 mb-1">
           <img
             src={iconImg}
-            alt="DJATI logo"
+            alt="Logo DJATI"
             className="w-8 h-8 object-contain"
           />
 
@@ -138,7 +157,6 @@ export default function Sidebar() {
           </span>
         </div>
 
-        {/* Profile */}
         <div className="flex items-center gap-3 py-3 border-b border-white/[0.06] mb-1">
           <div className="w-[38px] h-[38px] rounded-full bg-gradient-to-br from-[#ff9800] to-[#e65100] flex items-center justify-center font-extrabold text-[0.95rem] text-white flex-shrink-0">
             {userInitials}
@@ -155,7 +173,6 @@ export default function Sidebar() {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="flex flex-col gap-3 mt-1 flex-1">
           {navSections.map((section) => (
             <div key={section.title} className="flex flex-col gap-1">
@@ -172,12 +189,11 @@ export default function Sidebar() {
                     key={item.label}
                     type="button"
                     onClick={() => navigate(item.route)}
-                    className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] border-none w-full text-left cursor-pointer font-primary text-[0.82rem] transition-colors duration-200
-                      ${
-                        active
-                          ? "bg-djati-amber text-[#111] font-bold"
-                          : "bg-transparent text-djati-amber font-medium hover:bg-[rgba(255,152,0,0.08)]"
-                      }`}
+                    className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] border-none w-full text-left cursor-pointer font-primary text-[0.82rem] transition-colors duration-200 ${
+                      active
+                        ? "bg-djati-amber text-[#111] font-bold"
+                        : "bg-transparent text-djati-amber font-medium hover:bg-[rgba(255,152,0,0.08)]"
+                    }`}
                   >
                     <span
                       className={`flex-shrink-0 ${
@@ -195,7 +211,6 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        {/* Logout Button */}
         <div className="border-t border-white/[0.06] pt-2.5 mt-1">
           <button
             type="button"
@@ -206,7 +221,7 @@ export default function Sidebar() {
               <LogOut size={18} />
             </span>
 
-            Logout
+            Keluar
           </button>
         </div>
       </aside>
