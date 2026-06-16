@@ -3,7 +3,8 @@ import api from './api';
 const REPORT_ENDPOINT = '/admin/damage-reports';
 const REPORT_FALLBACK_ENDPOINT = '/admin/reports';
 
-const STORAGE_BASE_URL = 'http://127.0.0.1:8000/storage';
+const _API_BASE = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api').replace(/\/api\/?$/, '');
+const STORAGE_BASE_URL = `${_API_BASE}/storage`;
 
 // -----------------------------------------------------------------------------
 // BASIC HELPERS
