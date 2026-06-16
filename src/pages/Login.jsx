@@ -18,10 +18,10 @@ export default function Login() {
     if (!username || !password) return;
 
     try {
-      await login(username, password);
-
-      // ambil dari context (bukan dari response lagi)
-      const role = user?.role;
+      // login() returns the user object — jangan baca dari state 'user'
+      // karena React belum re-render saat baris berikutnya dieksekusi (race condition)
+      const loggedInUser = await login(username, password);
+      const role = loggedInUser?.role;
 
       if (role === 'admin') {
         navigate('/dashboard');

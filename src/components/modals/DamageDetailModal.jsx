@@ -1,6 +1,7 @@
 import StatusBadge from '../ui/StatusBadge';
 
-const API_STORAGE_URL = 'http://127.0.0.1:8000/storage';
+const _API_BASE = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api').replace(/\/api\/?$/, '');
+const API_STORAGE_URL = `${_API_BASE}/storage`;
 
 function isEmptyValue(value) {
   return (
