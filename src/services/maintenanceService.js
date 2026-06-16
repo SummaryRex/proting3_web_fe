@@ -53,24 +53,32 @@ function normalizeStatus(status) {
 
   const value = String(status)
     .toLowerCase()
-    .trim();
+    .trim()
+    .replaceAll(' ', '_')
+    .replaceAll('-', '_');
 
   if (value === 'pending') return 'requested';
+  if (value === 'waiting') return 'requested';
+  if (value === 'menunggu') return 'requested';
 
   if (value === 'scheduled') return 'approved';
+  if (value === 'terjadwal') return 'approved';
 
   if (value === 'finished') return 'completed';
-
+  if (value === 'complete') return 'completed';
   if (value === 'selesai') return 'completed';
 
   if (value === 'cancelled') return 'canceled';
-
+  if (value === 'cancel') return 'canceled';
   if (value === 'dibatalkan') return 'canceled';
+
+  if (value === 'reject') return 'rejected';
+  if (value === 'ditolak') return 'rejected';
 
   return value;
 }
 
-function cleanPayload(payload) {
+function cleanPayload(payload = {}) {
   const result = {};
 
   Object.entries(payload).forEach(([key, value]) => {
@@ -155,6 +163,7 @@ function getRoleName(item) {
     item?.user_role?.slug ||
     item?.user_role ||
     item?.role_name ||
+    item?.type ||
     item?.user?.role?.name ||
     item?.user?.role?.slug ||
     item?.user?.role ||
@@ -184,10 +193,12 @@ function isTechnicianRole(item, hasAnyRoleField = true) {
   const role = getRoleName(item);
 
   if (role) {
-    return (
-      role === 'technician' ||
-      role === 'mekanik'
-    );
+    return [
+      'technician',
+      'mekanik',
+      'teknisi',
+      'mechanic',
+    ].includes(role);
   }
 
   // Kalau endpoint /admin/technicians memang sudah khusus teknisi,
@@ -289,6 +300,17 @@ function buildSchedulePayload(scheduleData = {}) {
   });
 }
 
+async function getAdminBookings(params = {}) {
+  const { data } = await api.get(
+    '/admin/bookings',
+    {
+      params,
+    }
+  );
+
+  return unwrapList(data);
+}
+
 // -----------------------------------------------------------------------------
 // TECHNICIANS
 // -----------------------------------------------------------------------------
@@ -296,6 +318,7 @@ function buildSchedulePayload(scheduleData = {}) {
 export async function getTechnicians() {
   try {
     let responseData = null;
+    let fromDedicatedEndpoint = true;
 
     try {
       const { data } = await api.get(
@@ -304,6 +327,8 @@ export async function getTechnicians() {
 
       responseData = data;
     } catch (error) {
+      fromDedicatedEndpoint = false;
+
       console.warn(
         'GET /admin/technicians gagal, fallback ke /admin/users:',
         error
@@ -314,6 +339,8 @@ export async function getTechnicians() {
 
     // FALLBACK JIKA /admin/technicians ADA TAPI RETURN KOSONG
     if (!technicians.length) {
+      fromDedicatedEndpoint = false;
+
       const { data } = await api.get(
         '/admin/users'
       );
@@ -331,33 +358,17 @@ export async function getTechnicians() {
       technicians
     );
 
+    const hasAnyRoleField = technicians.some(
+      (item) => Boolean(getRoleName(item))
+    );
+
     technicians = technicians.filter(
-      (item) => {
-        const role = String(
-          item?.role?.name ||
-            item?.role?.slug ||
-            item?.role ||
-            item?.user_role ||
-            item?.role_name ||
-            item?.type ||
-            ''
-        )
-          .toLowerCase()
-          .trim();
-
-        console.log(
-          'USER ROLE CHECK:',
-          item?.name || item?.username,
-          role
-        );
-
-        return [
-          'technician',
-          'mekanik',
-          'teknisi',
-          'mechanic',
-        ].includes(role);
-      }
+      (item) => isTechnicianRole(
+        item,
+        fromDedicatedEndpoint && !hasAnyRoleField
+          ? false
+          : hasAnyRoleField
+      )
     );
 
     console.log(
@@ -388,11 +399,7 @@ export async function getTechnicians() {
           item.full_name,
 
         role:
-          item?.role?.name ||
-          item?.role?.slug ||
-          item?.role ||
-          item?.user_role ||
-          item?.role_name ||
+          getRoleName(item) ||
           'technician',
       })
     );
@@ -419,16 +426,24 @@ export async function getTechnicians() {
 
 export async function getApprovedReports() {
   try {
-    const { data } = await api.get(
-      '/admin/bookings',
-      {
-        params: {
-          status: 'requested',
-        },
-      }
-    );
+    /*
+     * Menyesuaikan backend ServiceBookingApprovalController terbaru:
+     * status=approval hanya mengembalikan request driver yang masih requested.
+     * Jika backend lama belum mendukung status=approval, fallback ke requested.
+     */
+    let bookings = await getAdminBookings({
+      status: 'approval',
+    });
 
-    return unwrapList(data);
+    if (!bookings.length) {
+      bookings = await getAdminBookings({
+        status: 'requested',
+      });
+    }
+
+    return bookings.filter((booking) => {
+      return normalizeStatus(booking?.status) === 'requested';
+    });
   } catch (error) {
     console.error(
       'GET APPROVED REPORTS ERROR:',
@@ -445,16 +460,30 @@ export async function getRequestedBookings() {
 
 export async function getSchedules() {
   try {
-    const { data } = await api.get(
-      '/admin/bookings',
-      {
-        params: {
-          status: 'all',
-        },
-      }
-    );
+    /*
+     * Menyesuaikan backend baru:
+     * status=active mengembalikan jadwal aktif saja.
+     * Jika backend lama belum mendukung status=active, fallback ke all.
+     */
+    let bookings = await getAdminBookings({
+      status: 'active',
+    });
 
-    return unwrapList(data);
+    if (!bookings.length) {
+      bookings = await getAdminBookings({
+        status: 'all',
+      });
+    }
+
+    return bookings.filter((booking) => {
+      const status = normalizeStatus(booking?.status);
+
+      return ![
+        'requested',
+        'rejected',
+        'canceled',
+      ].includes(status);
+    });
   } catch (error) {
     console.error(
       'GET SCHEDULES ERROR:',
@@ -466,7 +495,33 @@ export async function getSchedules() {
 }
 
 export async function getAllBookings() {
-  return getSchedules();
+  try {
+    return await getAdminBookings({
+      status: 'all',
+    });
+  } catch (error) {
+    console.error(
+      'GET ALL BOOKINGS ERROR:',
+      error
+    );
+
+    return [];
+  }
+}
+
+export async function getBookingHistory() {
+  try {
+    return await getAdminBookings({
+      status: 'history',
+    });
+  } catch (error) {
+    console.error(
+      'GET BOOKING HISTORY ERROR:',
+      error
+    );
+
+    return [];
+  }
 }
 
 export async function getActiveSchedules() {
@@ -550,7 +605,6 @@ export async function validateScheduleConflict({
         const activeStatus = ![
           'completed',
           'canceled',
-          'cancelled',
           'rejected',
         ].includes(
           normalizeStatus(
@@ -662,6 +716,32 @@ export async function rescheduleBooking(
   const { data } = await api.post(
     `/admin/bookings/${bookingId}/reschedule`,
     payload
+  );
+
+  return unwrapObject(data);
+}
+
+export async function rejectBooking(
+  bookingId,
+  payload = {}
+) {
+  if (!bookingId) {
+    throw new Error(
+      'Booking ID tidak valid.'
+    );
+  }
+
+  const body = cleanPayload({
+    note_admin:
+      payload.note_admin ||
+      payload.notes ||
+      payload.note ||
+      'Permintaan jadwal ditolak oleh admin.',
+  });
+
+  const { data } = await api.post(
+    `/admin/bookings/${bookingId}/reject`,
+    body
   );
 
   return unwrapObject(data);
@@ -786,6 +866,18 @@ export function isBookingCancelable(
   return [
     'requested',
     'approved',
+    'rescheduled',
+  ].includes(normalized);
+}
+
+export function isBookingRejectable(
+  status
+) {
+  const normalized =
+    normalizeStatus(status);
+
+  return [
+    'requested',
     'rescheduled',
   ].includes(normalized);
 }

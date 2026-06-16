@@ -1055,6 +1055,10 @@ function mapReport(raw = {}) {
 // -----------------------------------------------------------------------------
 // PUBLIC FUNCTIONS
 // -----------------------------------------------------------------------------
+// Catatan alur:
+// reportService.js hanya dipakai untuk Damage Report, riwayat, detail,
+// approve follow-up, dan finished repair history.
+// Reject approval booking ada di scheduleService.js melalui rejectBooking().
 
 export async function getReports(params = {}) {
   try {
@@ -1098,43 +1102,6 @@ export async function getReportById(id) {
     return mapReport(normalizeObjectResponse(data));
   } catch (error) {
     console.error('GET REPORT DETAIL ERROR:', {
-      status: error?.response?.status,
-      data: error?.response?.data,
-      message: error?.message,
-    });
-
-    throw error.response?.data || error;
-  }
-}
-
-export async function rejectReport(id, payload = {}) {
-  try {
-    if (!id) {
-      throw new Error('Report ID tidak valid.');
-    }
-
-    const body = {
-      note:
-        payload?.note ||
-        payload?.reason ||
-        payload?.admin_note ||
-        payload?.note_admin ||
-        '',
-    };
-
-    const data = await postWithFallback(
-      [
-        `${REPORT_ENDPOINT}/${id}/reject`,
-        `${REPORT_FALLBACK_ENDPOINT}/${id}/reject`,
-        `${REPORT_ENDPOINT}/${id}/reject-report`,
-        `${REPORT_FALLBACK_ENDPOINT}/${id}/reject-report`,
-      ],
-      body
-    );
-
-    return normalizeObjectResponse(data);
-  } catch (error) {
-    console.error('REJECT REPORT ERROR:', {
       status: error?.response?.status,
       data: error?.response?.data,
       message: error?.message,

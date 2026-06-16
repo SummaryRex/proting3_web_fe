@@ -1,404 +1,896 @@
 import api from './api';
 
-const BOOKING_ENDPOINT = '/admin/bookings';
-const TECHNICIAN_ENDPOINT = '/admin/technicians';
+// -----------------------------------------------------------------------------
+// HELPERS
+// -----------------------------------------------------------------------------
 
-function normalizeArrayResponse(data) {
-  if (Array.isArray(data)) return data;
+function unwrapList(data) {
+  const raw = data?.data ?? data;
 
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.data?.data)) return data.data.data;
+  if (Array.isArray(raw)) {
+    return raw;
+  }
 
-  if (Array.isArray(data?.bookings)) return data.bookings;
-  if (Array.isArray(data?.schedules)) return data.schedules;
-  if (Array.isArray(data?.reports)) return data.reports;
-  if (Array.isArray(data?.technicians)) return data.technicians;
-  if (Array.isArray(data?.users)) return data.users;
+  if (raw?.data && Array.isArray(raw.data)) {
+    return raw.data;
+  }
+
+  if (data?.bookings && Array.isArray(data.bookings)) {
+    return data.bookings;
+  }
+
+  if (
+    data?.service_bookings &&
+    Array.isArray(data.service_bookings)
+  ) {
+    return data.service_bookings;
+  }
+
+  if (
+    raw?.service_bookings &&
+    Array.isArray(raw.service_bookings)
+  ) {
+    return raw.service_bookings;
+  }
 
   return [];
 }
 
-function normalizeStatus(value) {
-  const status = String(value || '')
+function unwrapObject(data) {
+  if (
+    data?.data &&
+    typeof data.data === 'object' &&
+    !Array.isArray(data.data)
+  ) {
+    return data.data;
+  }
+
+  return data;
+}
+
+function normalizeStatus(status) {
+  if (!status) return 'requested';
+
+  const value = String(status)
     .toLowerCase()
     .trim()
     .replaceAll(' ', '_')
     .replaceAll('-', '_');
 
-  if (status === 'scheduled') return 'approved';
-  if (status === 'finished') return 'completed';
-  if (status === 'selesai') return 'completed';
-  if (status === 'cancelled') return 'canceled';
-  if (status === 'dibatalkan') return 'canceled';
-  if (status === 'pending') return 'requested';
+  if (value === 'pending') return 'requested';
+  if (value === 'waiting') return 'requested';
+  if (value === 'menunggu') return 'requested';
 
-  return status;
+  if (value === 'scheduled') return 'approved';
+  if (value === 'terjadwal') return 'approved';
+
+  if (value === 'finished') return 'completed';
+  if (value === 'complete') return 'completed';
+  if (value === 'selesai') return 'completed';
+
+  if (value === 'cancelled') return 'canceled';
+  if (value === 'cancel') return 'canceled';
+  if (value === 'dibatalkan') return 'canceled';
+
+  if (value === 'reject') return 'rejected';
+  if (value === 'ditolak') return 'rejected';
+
+  return value;
 }
 
-function isClosedStatus(value) {
-  const status = normalizeStatus(value);
+function cleanPayload(payload = {}) {
+  const result = {};
 
-  return ['completed', 'canceled', 'rejected'].includes(status);
+  Object.entries(payload).forEach(([key, value]) => {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ''
+    ) {
+      result[key] = value;
+    }
+  });
+
+  return result;
 }
 
 function getTechnicianId(value) {
   if (!value) return null;
 
-  if (typeof value === 'number') return value;
+  if (typeof value === 'number') {
+    return value;
+  }
 
   if (typeof value === 'string') {
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+
+    return Number.isFinite(parsed)
+      ? parsed
+      : null;
   }
 
   if (typeof value === 'object') {
     const rawId =
-      value.id ||
-      value.user_id ||
-      value.technician_id ||
-      value.mechanic_id ||
-      value.user?.id;
+      value.id ??
+      value.user_id ??
+      value.technician_id ??
+      value.mechanic_id ??
+      value.value;
 
     const parsed = Number(rawId);
-    return Number.isFinite(parsed) ? parsed : null;
+
+    return Number.isFinite(parsed)
+      ? parsed
+      : null;
   }
 
   return null;
 }
 
-function toDateObject(value) {
-  if (!value) return null;
+function getTechnicianName(value) {
+  if (!value) return '-';
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return String(value);
+  }
+
+  if (typeof value === 'object') {
+    return (
+      value.name ||
+      value.username ||
+      value.label ||
+      value.full_name ||
+      value.user?.name ||
+      value.user?.username ||
+      String(value.id || '-')
+    );
+  }
+
+  return '-';
+}
+
+function getRoleName(item) {
+  const roleSource =
+    item?.role?.name ||
+    item?.role?.slug ||
+    item?.role?.label ||
+    item?.role ||
+    item?.user_role?.name ||
+    item?.user_role?.slug ||
+    item?.user_role ||
+    item?.role_name ||
+    item?.type ||
+    item?.user?.role?.name ||
+    item?.user?.role?.slug ||
+    item?.user?.role ||
+    item?.user?.role_name ||
+    '';
+
+  if (!roleSource) return '';
+
+  if (typeof roleSource === 'object') {
+    return String(
+      roleSource.name ||
+        roleSource.slug ||
+        roleSource.label ||
+        roleSource.code ||
+        ''
+    )
+      .toLowerCase()
+      .trim();
+  }
+
+  return String(roleSource)
+    .toLowerCase()
+    .trim();
+}
+
+function isTechnicianRole(item, hasAnyRoleField = true) {
+  const role = getRoleName(item);
+
+  if (role) {
+    return [
+      'technician',
+      'mekanik',
+      'teknisi',
+      'mechanic',
+    ].includes(role);
+  }
+
+  // Kalau endpoint /admin/technicians memang sudah khusus teknisi,
+  // tapi backend tidak mengirim field role, tetap izinkan data muncul.
+  // Namun jika ada sebagian item punya role, item tanpa role tidak ikut.
+  return !hasAnyRoleField;
+}
+
+function getDateKey(value) {
+  if (!value) return '';
+
+  if (typeof value === 'string') {
+    return value.slice(0, 10);
+  }
 
   try {
-    const raw = String(value).trim();
-
-    if (!raw || raw === '-' || raw.toLowerCase() === 'null') {
-      return null;
-    }
-
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) {
-      const parsed = new Date(raw);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-
-    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(raw)) {
-      const parsed = new Date(raw.replace(' ', 'T'));
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-
-    const parsed = new Date(raw);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  } catch (_) {
-    return null;
+    return new Date(value)
+      .toISOString()
+      .slice(0, 10);
+  } catch {
+    return '';
   }
 }
 
-function getRange(startValue, finishValue) {
-  const start = toDateObject(startValue);
+function buildNoteAdmin(scheduleData = {}) {
+  const priority =
+    scheduleData.priority || 'medium';
 
-  if (!start) {
-    return {
-      start: null,
-      end: null,
-    };
+  const mechanic =
+    scheduleData.mechanic ||
+    scheduleData.technician ||
+    scheduleData.technician_id;
+
+  const mechanicName =
+    scheduleData.technician_name ||
+    getTechnicianName(mechanic);
+
+  const notes =
+    scheduleData.notes ||
+    scheduleData.note ||
+    '';
+
+  if (scheduleData.note_admin) {
+    return scheduleData.note_admin;
   }
 
-  let end = toDateObject(finishValue);
-
-  if (!end || end <= start) {
-    end = new Date(start.getTime() + 60 * 60 * 1000);
+  if (notes && notes.trim()) {
+    return `Mechanic: ${
+      mechanicName || '-'
+    } | Priority: ${priority} | Notes: ${notes.trim()}`;
   }
 
-  return {
-    start,
-    end,
-  };
+  return `Mechanic: ${
+    mechanicName || '-'
+  } | Priority: ${priority}`;
 }
 
-function isOverlap(aStart, aEnd, bStart, bEnd) {
-  if (!aStart || !aEnd || !bStart || !bEnd) return false;
+function buildSchedulePayload(scheduleData = {}) {
+  const scheduledAt =
+    scheduleData.scheduled_at ||
+    scheduleData.scheduledAt ||
+    scheduleData.date ||
+    scheduleData.dateVal;
 
-  return aStart < bEnd && aEnd > bStart;
-}
+  const estimatedFinishAt =
+    scheduleData.estimated_finish_at ||
+    scheduleData.estimatedFinishAt ||
+    scheduleData.finish_at ||
+    scheduleData.finishAt;
 
-function checkConflictFromSchedules({
-  schedules = [],
-  technician_id,
-  scheduled_at,
-  estimated_finish_at,
-  booking_id,
-}) {
-  const currentTechnicianId = getTechnicianId(technician_id);
+  const priority =
+    scheduleData.priority || 'medium';
 
-  const currentRange = getRange(
-    scheduled_at,
-    estimated_finish_at
-  );
+  const technicianId =
+    scheduleData.technician_id ||
+    scheduleData.technicianId ||
+    scheduleData.mechanic_id ||
+    getTechnicianId(scheduleData.mechanic) ||
+    getTechnicianId(scheduleData.technician);
 
-  if (!currentTechnicianId || !currentRange.start || !currentRange.end) {
-    return false;
+  if (!scheduledAt) {
+    throw new Error(
+      'Tanggal schedule wajib diisi.'
+    );
   }
 
-  return schedules.some((item) => {
-    const status = normalizeStatus(item?.status || item?.raw?.status);
-
-    if (isClosedStatus(status)) return false;
-
-    const itemBookingId =
-      item?.bookingId ||
-      item?.booking_id ||
-      item?.raw?.id ||
-      item?.id;
-
-    if (
-      booking_id &&
-      itemBookingId &&
-      String(booking_id) === String(itemBookingId)
-    ) {
-      return false;
-    }
-
-    const itemTechnicianId = getTechnicianId(
-      item?.technician_id ||
-        item?.mechanic_id ||
-        item?.raw?.technician_id ||
-        item?.raw?.mechanic_id ||
-        item?.technician ||
-        item?.mechanic
+  if (!technicianId) {
+    throw new Error(
+      'Technician wajib dipilih.'
     );
+  }
 
-    if (
-      !itemTechnicianId ||
-      Number(itemTechnicianId) !== Number(currentTechnicianId)
-    ) {
-      return false;
-    }
-
-    const itemRange = getRange(
-      item?.dateVal ||
-        item?.scheduled_at ||
-        item?.raw?.scheduled_at ||
-        item?.date,
-      item?.estimatedFinishAt ||
-        item?.estimated_finish_at ||
-        item?.raw?.estimated_finish_at
-    );
-
-    return isOverlap(
-      itemRange.start,
-      itemRange.end,
-      currentRange.start,
-      currentRange.end
-    );
+  return cleanPayload({
+    scheduled_at: scheduledAt,
+    estimated_finish_at: estimatedFinishAt,
+    technician_id: Number(technicianId),
+    priority,
+    note_admin: buildNoteAdmin(scheduleData),
   });
 }
+
+async function getAdminBookings(params = {}) {
+  const { data } = await api.get(
+    '/admin/bookings',
+    {
+      params,
+    }
+  );
+
+  return unwrapList(data);
+}
+
+// -----------------------------------------------------------------------------
+// TECHNICIANS
+// -----------------------------------------------------------------------------
 
 export async function getTechnicians() {
   try {
-    const { data } = await api.get(TECHNICIAN_ENDPOINT);
+    let responseData = null;
+    let fromDedicatedEndpoint = true;
 
-    const rows = normalizeArrayResponse(data);
+    try {
+      const { data } = await api.get(
+        '/admin/technicians'
+      );
 
-    return rows.filter((item) => {
-      const role = String(
-        item?.role ||
-          item?.role_name ||
-          item?.user?.role ||
-          item?.user?.role_name ||
-          ''
-      )
-        .toLowerCase()
-        .trim();
+      responseData = data;
+    } catch (error) {
+      fromDedicatedEndpoint = false;
 
-      if (!role) return true;
-
-      return ['technician', 'teknisi', 'mechanic', 'mekanik'].includes(role);
-    });
-  } catch (error) {
-    console.error('GET TECHNICIANS ERROR:', error.response || error);
-    return [];
-  }
-}
-
-/**
- * Untuk tabel Requested Service Bookings.
- * Route backend:
- * GET /api/admin/bookings?status=requested
- */
-export async function getApprovedReports() {
-  try {
-    const { data } = await api.get(BOOKING_ENDPOINT, {
-      params: {
-        status: 'requested',
-      },
-    });
-
-    return normalizeArrayResponse(data);
-  } catch (error) {
-    console.error('GET REQUESTED BOOKINGS ERROR:', error.response || error);
-    return [];
-  }
-}
-
-/**
- * Untuk tabel Maintenance Schedule List.
- * Route backend:
- * GET /api/admin/bookings?status=all
- */
-export async function getSchedules() {
-  try {
-    const { data } = await api.get(BOOKING_ENDPOINT, {
-      params: {
-        status: 'all',
-      },
-    });
-
-    return normalizeArrayResponse(data);
-  } catch (error) {
-    console.error('GET SCHEDULES ERROR:', error.response || error);
-    return [];
-  }
-}
-
-/**
- * Compatibility function.
- * Tidak dipakai langsung oleh MaintenanceScheduling saat ini.
- */
-export async function createSchedule(scheduleData) {
-  try {
-    const bookingId =
-      scheduleData?.booking_id ||
-      scheduleData?.bookingId ||
-      scheduleData?.id;
-
-    if (!bookingId) {
-      throw new Error('Booking ID tidak ditemukan untuk membuat schedule.');
+      console.warn(
+        'GET /admin/technicians gagal, fallback ke /admin/users:',
+        error
+      );
     }
 
-    return await approveBooking(bookingId, scheduleData);
-  } catch (error) {
-    console.error('CREATE SCHEDULE ERROR:', error.response || error);
-    throw error.response?.data || error;
-  }
-}
+    let technicians = unwrapList(responseData);
 
-/**
- * Compatibility function.
- * Tidak dipakai langsung oleh MaintenanceScheduling saat ini.
- */
-export async function updateSchedule(id, updates) {
-  try {
-    return await rescheduleBooking(id, updates);
-  } catch (error) {
-    console.error('UPDATE SCHEDULE ERROR:', error.response || error);
-    throw error.response?.data || error;
-  }
-}
+    // FALLBACK JIKA /admin/technicians ADA TAPI RETURN KOSONG
+    if (!technicians.length) {
+      fromDedicatedEndpoint = false;
 
-/**
- * Approve booking / create schedule.
- * Route backend:
- * POST /api/admin/bookings/{booking}/approve
- */
-export async function approveBooking(id, payload = {}) {
-  try {
-    const { data } = await api.post(
-      `${BOOKING_ENDPOINT}/${id}/approve`,
-      payload
+      const { data } = await api.get(
+        '/admin/users'
+      );
+
+      console.log(
+        'USERS RAW FALLBACK:',
+        data
+      );
+
+      technicians = unwrapList(data);
+    }
+
+    console.log(
+      'TECHNICIANS BEFORE FILTER:',
+      technicians
     );
 
-    return data?.data ?? data;
-  } catch (error) {
-    console.error('APPROVE BOOKING ERROR:', error.response || error);
-    throw error.response?.data || error;
-  }
-}
-
-/**
- * Reschedule booking.
- * Route backend:
- * POST /api/admin/bookings/{booking}/reschedule
- */
-export async function rescheduleBooking(id, payload = {}) {
-  try {
-    const { data } = await api.post(
-      `${BOOKING_ENDPOINT}/${id}/reschedule`,
-      payload
+    const hasAnyRoleField = technicians.some(
+      (item) => Boolean(getRoleName(item))
     );
 
-    return data?.data ?? data;
-  } catch (error) {
-    console.error('RESCHEDULE BOOKING ERROR:', error.response || error);
-    throw error.response?.data || error;
-  }
-}
-
-/**
- * Cancel booking / schedule.
- * Route backend:
- * POST /api/admin/bookings/{booking}/cancel
- */
-export async function cancelBooking(id, payload = {}) {
-  try {
-    const { data } = await api.post(
-      `${BOOKING_ENDPOINT}/${id}/cancel`,
-      payload
+    technicians = technicians.filter(
+      (item) => isTechnicianRole(
+        item,
+        fromDedicatedEndpoint && !hasAnyRoleField
+          ? false
+          : hasAnyRoleField
+      )
     );
 
-    return data?.data ?? data;
+    console.log(
+      'TECHNICIANS AFTER FILTER:',
+      technicians
+    );
+
+    technicians = technicians.map(
+      (item, index) => ({
+        id:
+          item.id ||
+          item.user_id ||
+          item.technician_id ||
+          index + 1,
+
+        name:
+          item.name ||
+          item.username ||
+          item.full_name ||
+          item.label ||
+          `Technician ${
+            index + 1
+          }`,
+
+        username:
+          item.username ||
+          item.name ||
+          item.full_name,
+
+        role:
+          getRoleName(item) ||
+          'technician',
+      })
+    );
+
+    console.log(
+      'FINAL TECHNICIANS:',
+      technicians
+    );
+
+    return technicians;
   } catch (error) {
-    console.error('CANCEL BOOKING ERROR:', error.response || error);
-    throw error.response?.data || error;
+    console.error(
+      'GET TECHNICIANS ERROR:',
+      error
+    );
+
+    return [];
   }
 }
 
-/**
- * Validasi konflik schedule.
- *
- * Di api.php kamu belum ada route khusus:
- * POST /api/admin/bookings/validate-schedule-conflict
- *
- * Jadi function ini melakukan validasi lokal dengan mengambil semua booking.
- */
-export async function validateScheduleConflict(payload = {}) {
-  try {
-    const schedules = await getSchedules();
+// -----------------------------------------------------------------------------
+// ADMIN BOOKING LIST
+// -----------------------------------------------------------------------------
 
-    const conflict = checkConflictFromSchedules({
-      schedules,
-      technician_id: payload?.technician_id,
-      scheduled_at: payload?.scheduled_at,
-      estimated_finish_at: payload?.estimated_finish_at,
-      booking_id: payload?.booking_id,
+export async function getApprovedReports() {
+  try {
+    /*
+     * Menyesuaikan backend ServiceBookingApprovalController terbaru:
+     * status=approval hanya mengembalikan request driver yang masih requested.
+     * Jika backend lama belum mendukung status=approval, fallback ke requested.
+     */
+    let bookings = await getAdminBookings({
+      status: 'approval',
     });
 
+    if (!bookings.length) {
+      bookings = await getAdminBookings({
+        status: 'requested',
+      });
+    }
+
+    return bookings.filter((booking) => {
+      return normalizeStatus(booking?.status) === 'requested';
+    });
+  } catch (error) {
+    console.error(
+      'GET APPROVED REPORTS ERROR:',
+      error
+    );
+
+    return [];
+  }
+}
+
+export async function getRequestedBookings() {
+  return getApprovedReports();
+}
+
+export async function getSchedules() {
+  try {
+    /*
+     * Menyesuaikan backend baru:
+     * status=active mengembalikan jadwal aktif saja.
+     * Jika backend lama belum mendukung status=active, fallback ke all.
+     */
+    let bookings = await getAdminBookings({
+      status: 'active',
+    });
+
+    if (!bookings.length) {
+      bookings = await getAdminBookings({
+        status: 'all',
+      });
+    }
+
+    return bookings.filter((booking) => {
+      const status = normalizeStatus(booking?.status);
+
+      return ![
+        'requested',
+        'rejected',
+        'canceled',
+      ].includes(status);
+    });
+  } catch (error) {
+    console.error(
+      'GET SCHEDULES ERROR:',
+      error
+    );
+
+    return [];
+  }
+}
+
+export async function getAllBookings() {
+  try {
+    return await getAdminBookings({
+      status: 'all',
+    });
+  } catch (error) {
+    console.error(
+      'GET ALL BOOKINGS ERROR:',
+      error
+    );
+
+    return [];
+  }
+}
+
+export async function getBookingHistory() {
+  try {
+    return await getAdminBookings({
+      status: 'history',
+    });
+  } catch (error) {
+    console.error(
+      'GET BOOKING HISTORY ERROR:',
+      error
+    );
+
+    return [];
+  }
+}
+
+export async function getActiveSchedules() {
+  const bookings =
+    await getSchedules();
+
+  return bookings.filter((booking) => {
+    const status =
+      normalizeStatus(
+        booking?.status
+      );
+
+    return [
+      'approved',
+      'rescheduled',
+      'in_progress',
+      'completed',
+    ].includes(status);
+  });
+}
+
+export async function getPendingScheduleRequests() {
+  const bookings =
+    await getApprovedReports();
+
+  return bookings.filter((booking) => {
+    return (
+      normalizeStatus(
+        booking?.status
+      ) === 'requested'
+    );
+  });
+}
+
+// -----------------------------------------------------------------------------
+// VALIDASI BENTROK JADWAL
+// -----------------------------------------------------------------------------
+
+export async function validateScheduleConflict({
+  technician_id,
+  scheduled_at,
+  booking_id = null,
+}) {
+  try {
+    if (!technician_id || !scheduled_at) {
+      return {
+        conflict: false,
+        booking: null,
+      };
+    }
+
+    const bookings =
+      await getSchedules();
+
+    const targetDate =
+      getDateKey(scheduled_at);
+
+    const conflict =
+      bookings.find((booking) => {
+        const bookingDate =
+          getDateKey(
+            booking?.scheduled_at ||
+              booking?.dateVal ||
+              booking?.date
+          );
+
+        const bookingTechnicianId =
+          booking?.technician_id ||
+          booking?.mechanic_id ||
+          booking?.technician?.id ||
+          booking?.mechanic?.id ||
+          booking?.user_id;
+
+        const sameTechnician =
+          Number(bookingTechnicianId) ===
+          Number(technician_id);
+
+        const sameDate =
+          bookingDate === targetDate;
+
+        const activeStatus = ![
+          'completed',
+          'canceled',
+          'rejected',
+        ].includes(
+          normalizeStatus(
+            booking?.status
+          )
+        );
+
+        const notCurrentBooking =
+          Number(booking?.id) !==
+          Number(booking_id);
+
+        return (
+          sameTechnician &&
+          sameDate &&
+          activeStatus &&
+          notCurrentBooking
+        );
+      });
+
     return {
-      conflict,
-      message: conflict
-        ? 'Technician sudah memiliki jadwal pada tanggal dan jam tersebut.'
-        : '',
+      conflict: !!conflict,
+      booking: conflict || null,
     };
   } catch (error) {
-    console.error('VALIDATE SCHEDULE CONFLICT ERROR:', error.response || error);
+    console.error(
+      'VALIDATE CONFLICT ERROR:',
+      error
+    );
 
     return {
       conflict: false,
+      booking: null,
     };
   }
 }
 
-export function checkLocalScheduleConflict({
-  schedules = [],
-  technician_id,
-  scheduled_at,
-  estimated_finish_at,
-  booking_id,
-}) {
-  return checkConflictFromSchedules({
-    schedules,
-    technician_id,
-    scheduled_at,
-    estimated_finish_at,
-    booking_id,
+// -----------------------------------------------------------------------------
+// ADMIN ACTIONS
+// -----------------------------------------------------------------------------
+
+export async function approveBooking(
+  bookingId,
+  scheduleData = {}
+) {
+  if (!bookingId) {
+    throw new Error(
+      'Booking ID tidak valid.'
+    );
+  }
+
+  const payload =
+    buildSchedulePayload(
+      scheduleData
+    );
+
+  const validation =
+    await validateScheduleConflict({
+      technician_id:
+        payload.technician_id,
+      scheduled_at:
+        payload.scheduled_at,
+      booking_id: bookingId,
+    });
+
+  if (validation.conflict) {
+    throw new Error(
+      'Technician sudah memiliki jadwal pada tanggal tersebut.'
+    );
+  }
+
+  const { data } = await api.post(
+    `/admin/bookings/${bookingId}/approve`,
+    payload
+  );
+
+  return unwrapObject(data);
+}
+
+export async function rescheduleBooking(
+  bookingId,
+  scheduleData = {}
+) {
+  if (!bookingId) {
+    throw new Error(
+      'Booking ID tidak valid.'
+    );
+  }
+
+  const payload =
+    buildSchedulePayload(
+      scheduleData
+    );
+
+  const validation =
+    await validateScheduleConflict({
+      technician_id:
+        payload.technician_id,
+      scheduled_at:
+        payload.scheduled_at,
+      booking_id: bookingId,
+    });
+
+  if (validation.conflict) {
+    throw new Error(
+      'Technician sudah memiliki jadwal pada tanggal tersebut.'
+    );
+  }
+
+  const { data } = await api.post(
+    `/admin/bookings/${bookingId}/reschedule`,
+    payload
+  );
+
+  return unwrapObject(data);
+}
+
+export async function rejectBooking(
+  bookingId,
+  payload = {}
+) {
+  if (!bookingId) {
+    throw new Error(
+      'Booking ID tidak valid.'
+    );
+  }
+
+  const body = cleanPayload({
+    note_admin:
+      payload.note_admin ||
+      payload.notes ||
+      payload.note ||
+      'Permintaan jadwal ditolak oleh admin.',
   });
+
+  const { data } = await api.post(
+    `/admin/bookings/${bookingId}/reject`,
+    body
+  );
+
+  return unwrapObject(data);
+}
+
+export async function cancelBooking(
+  bookingId,
+  payload = {}
+) {
+  if (!bookingId) {
+    throw new Error(
+      'Booking ID tidak valid.'
+    );
+  }
+
+  const body = cleanPayload({
+    note_admin:
+      payload.note_admin ||
+      payload.notes ||
+      payload.note ||
+      '',
+  });
+
+  const { data } = await api.post(
+    `/admin/bookings/${bookingId}/cancel`,
+    body
+  );
+
+  return unwrapObject(data);
+}
+
+// -----------------------------------------------------------------------------
+// COMPATIBILITY UNTUK KODE LAMA
+// -----------------------------------------------------------------------------
+
+export async function createSchedule(
+  scheduleData = {}
+) {
+  const bookingId =
+    scheduleData.bookingId ||
+    scheduleData.booking_id ||
+    scheduleData.id;
+
+  if (!bookingId) {
+    throw new Error(
+      'Booking ID wajib dikirim.'
+    );
+  }
+
+  return approveBooking(
+    bookingId,
+    scheduleData
+  );
+}
+
+export async function updateSchedule(
+  id,
+  updates = {}
+) {
+  const bookingId =
+    updates.bookingId ||
+    updates.booking_id ||
+    id;
+
+  if (!bookingId) {
+    throw new Error(
+      'Booking ID tidak valid.'
+    );
+  }
+
+  return rescheduleBooking(
+    bookingId,
+    updates
+  );
+}
+
+// -----------------------------------------------------------------------------
+// OPTIONAL HELPERS
+// -----------------------------------------------------------------------------
+
+export function mapBookingStatusLabel(
+  status
+) {
+  const normalized =
+    normalizeStatus(status);
+
+  const labels = {
+    requested: 'Requested',
+    approved: 'Scheduled',
+    rescheduled: 'Rescheduled',
+    in_progress: 'In Progress',
+    completed: 'Completed',
+    canceled: 'Canceled',
+    rejected: 'Rejected',
+  };
+
+  return (
+    labels[normalized] ||
+    status ||
+    '-'
+  );
+}
+
+export function isBookingEditable(
+  status
+) {
+  const normalized =
+    normalizeStatus(status);
+
+  return [
+    'approved',
+    'rescheduled',
+  ].includes(normalized);
+}
+
+export function isBookingCancelable(
+  status
+) {
+  const normalized =
+    normalizeStatus(status);
+
+  return [
+    'requested',
+    'approved',
+    'rescheduled',
+  ].includes(normalized);
+}
+
+export function isBookingRejectable(
+  status
+) {
+  const normalized =
+    normalizeStatus(status);
+
+  return [
+    'requested',
+    'rescheduled',
+  ].includes(normalized);
+}
+
+export function isBookingClosed(
+  status
+) {
+  const normalized =
+    normalizeStatus(status);
+
+  return [
+    'completed',
+    'canceled',
+    'rejected',
+  ].includes(normalized);
 }

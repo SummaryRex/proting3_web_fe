@@ -17,12 +17,27 @@ import {
   deleteFinanceTransactionApi,
 } from "../services/api";
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
 function getTodayDate() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = pad2(now.getMonth() + 1);
+  const day = pad2(now.getDate());
+
+  return `${year}-${month}-${day}`;
 }
 
 function getCurrentMonth() {
-  return new Date().toISOString().slice(0, 7);
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = pad2(now.getMonth() + 1);
+
+  return `${year}-${month}`;
 }
 
 function formatCurrency(value) {
@@ -35,17 +50,30 @@ function formatDate(value) {
   if (!value) return "-";
 
   const dateOnly = String(value).slice(0, 10);
-  const date = new Date(dateOnly);
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
-  if (Number.isNaN(date.getTime())) {
+  if (!match) {
     return dateOnly;
   }
 
-  return date.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  const [, year, month, day] = match;
+
+  const monthLabels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mei",
+    "Jun",
+    "Jul",
+    "Agu",
+    "Sep",
+    "Okt",
+    "Nov",
+    "Des",
+  ];
+
+  return `${day} ${monthLabels[Number(month) - 1] || month} ${year}`;
 }
 
 function getFriendlyErrorMessage(error, fallback) {
@@ -472,314 +500,322 @@ export default function FinanceTransactionsPage() {
               </p>
             </div>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <SummaryCard
-            title="Dana Masuk"
-            value={summary.danaMasuk}
-            icon={TrendingUp}
-            tone="green"
-            description="Alokasi atau reimburse manual dari perusahaan."
-          />
-
-          <SummaryCard
-            title="Biaya Keluar"
-            value={summary.biayaKeluar}
-            icon={TrendingDown}
-            tone="red"
-            description="Biaya otomatis dari perbaikan dan pemakaian sparepart."
-          />
-
-          <SummaryCard
-            title="Sisa Dana"
-            value={summary.sisaDana}
-            icon={Wallet}
-            tone="amber"
-            description="Selisih antara dana masuk dan biaya perbaikan."
-          />
-        </section>
-
-        <section className="mb-6 rounded-2xl border border-white/10 bg-[#171a23]/95 p-5 shadow-2xl shadow-black/20">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5">
-            <div>
-              <h2 className="text-lg font-bold text-djati-amber">
-                {isEditing ? "Edit Dana Masuk" : "Input Dana Masuk"}
-              </h2>
-
-              <p className="text-xs text-white/40 mt-1 max-w-2xl">
-                Dana masuk manual berasal dari alokasi dana perbaikan,
-                reimburse, atau kas operasional bengkel.
-              </p>
-            </div>
-
-            {isEditing && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-white/60 hover:bg-white/5 text-xs font-bold w-fit"
-              >
-                <X size={14} />
-                Batal Edit
-              </button>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
-                  Kategori Dana
-                </label>
-
-                <input
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  placeholder="Contoh: Alokasi Dana Perbaikan"
-                  className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
-                  Nominal Dana
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  placeholder="Masukkan nominal"
-                  className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
-                  Tanggal
-                </label>
-
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(event) => setDate(event.target.value)}
-                  className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
-                  Catatan
-                </label>
-
-                <input
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  placeholder="Catatan opsional"
-                  className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-5">
-              <p className="text-xs text-white/35">
-                Biaya keluar dari perbaikan dan inventaris tetap tercatat
-                otomatis, sehingga tidak perlu diinput manual.
-              </p>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-djati-amber text-black font-bold rounded-xl px-5 py-3 disabled:opacity-50 min-w-[190px]"
-              >
-                {loading
-                  ? "Menyimpan..."
-                  : isEditing
-                  ? "Perbarui Dana Masuk"
-                  : "Simpan Dana Masuk"}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#171a23]/95 p-5 shadow-2xl shadow-black/20">
-          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-5">
-            <div>
-              <h2 className="text-lg font-bold text-djati-amber">
-                Laporan Dana Perbaikan
-              </h2>
-
-              <p className="text-xs text-white/40 mt-1 max-w-2xl">
-                Menampilkan riwayat dana masuk dan biaya keluar. Biaya otomatis
-                dari perbaikan dan inventaris tidak bisa diedit atau dihapus.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full xl:w-auto">
-              <input
-                type="month"
-                value={month}
-                onChange={(event) => setMonth(event.target.value)}
-                className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <SummaryCard
+                title="Dana Masuk"
+                value={summary.danaMasuk}
+                icon={TrendingUp}
+                tone="green"
+                description="Alokasi atau reimburse manual dari perusahaan."
               />
 
-              <select
-                value={typeFilter}
-                onChange={(event) => setTypeFilter(event.target.value)}
-                className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
-              >
-                <option value="">Semua Jenis</option>
-                <option value="income">Dana Masuk</option>
-                <option value="expense">Biaya Keluar</option>
-              </select>
+              <SummaryCard
+                title="Biaya Keluar"
+                value={summary.biayaKeluar}
+                icon={TrendingDown}
+                tone="red"
+                description="Biaya otomatis dari perbaikan dan pemakaian sparepart."
+              />
 
-              <select
-                value={sourceFilter}
-                onChange={(event) => setSourceFilter(event.target.value)}
-                className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
-              >
-                <option value="">Semua Sumber</option>
-                <option value="manual">Manual</option>
-                <option value="repair">Perbaikan</option>
-                <option value="inventory">Inventaris</option>
-              </select>
-            </div>
-          </div>
+              <SummaryCard
+                title="Sisa Dana"
+                value={summary.sisaDana}
+                icon={Wallet}
+                tone="amber"
+                description="Selisih antara dana masuk dan biaya perbaikan."
+              />
+            </section>
 
-          {typeFilter || sourceFilter ? (
-            <div className="mb-4 rounded-xl border border-djati-amber/25 bg-djati-amber/10 px-4 py-3 text-xs text-djati-amber">
-              Tabel sedang difilter. Ringkasan di atas tetap menghitung semua
-              dana pada bulan yang dipilih.
-            </div>
-          ) : null}
+            <section className="mb-6 rounded-2xl border border-white/10 bg-[#171a23]/95 p-5 shadow-2xl shadow-black/20">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5">
+                <div>
+                  <h2 className="text-lg font-bold text-djati-amber">
+                    {isEditing ? "Edit Dana Masuk" : "Input Dana Masuk"}
+                  </h2>
 
-          <div className="overflow-x-auto rounded-2xl border border-white/10">
-            <table className="w-full text-sm min-w-[980px]">
-              <thead className="bg-djati-amber text-black">
-                <tr>
-                  <th className="p-4 text-left font-bold">Tanggal</th>
-                  <th className="p-4 text-left font-bold">Jenis</th>
-                  <th className="p-4 text-left font-bold">Kategori</th>
-                  <th className="p-4 text-left font-bold">Nominal</th>
-                  <th className="p-4 text-left font-bold">Sumber</th>
-                  <th className="p-4 text-left font-bold">Catatan / Ref</th>
-                  <th className="p-4 text-left font-bold">Aksi</th>
-                </tr>
-              </thead>
+                  <p className="text-xs text-white/40 mt-1 max-w-2xl">
+                    Dana masuk manual berasal dari alokasi dana perbaikan,
+                    reimburse, atau kas operasional bengkel.
+                  </p>
+                </div>
 
-              <tbody>
-                {transactions.map((transaction) => {
-                  const isDanaMasuk = transaction.type === "income";
-                  const canModify = isDanaMasuk && !transaction.locked;
+                {isEditing && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-white/60 hover:bg-white/5 text-xs font-bold w-fit"
+                  >
+                    <X size={14} />
+                    Batal Edit
+                  </button>
+                )}
+              </div>
 
-                  return (
-                    <tr
-                      key={transaction.id}
-                      className="border-t border-white/10 hover:bg-white/[0.03]"
-                    >
-                      <td className="p-4 text-white/80 whitespace-nowrap">
-                        {formatDate(transaction.date)}
-                      </td>
+              <form onSubmit={handleSubmit}>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
+                      Kategori Dana
+                    </label>
 
-                      <td className="p-4">
-                        <span
-                          className={`inline-flex items-center px-3 py-1.5 rounded-full text-[0.68rem] font-bold uppercase border ${
-                            isDanaMasuk
-                              ? "bg-green-500/10 text-green-400 border-green-500/25"
-                              : "bg-red-500/10 text-red-400 border-red-500/25"
-                          }`}
-                        >
-                          {getTypeLabel(transaction.type)}
-                          {!isDanaMasuk ? " Otomatis" : ""}
-                        </span>
-                      </td>
+                    <input
+                      value={category}
+                      onChange={(event) => setCategory(event.target.value)}
+                      placeholder="Contoh: Alokasi Dana Perbaikan"
+                      className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+                      required
+                    />
+                  </div>
 
-                      <td className="p-4">
-                        <div className="font-semibold text-white">
-                          {transaction.category || "-"}
-                        </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
+                      Nominal Dana
+                    </label>
 
-                        <div className="text-xs text-white/35 mt-1">
-                          {transaction.locked ? "Terkunci / Otomatis" : "Manual"}
-                        </div>
-                      </td>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={amount}
+                      onChange={(event) => setAmount(event.target.value)}
+                      placeholder="Masukkan nominal"
+                      className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+                      required
+                    />
+                  </div>
 
-                      <td className="p-4 font-bold text-djati-amber whitespace-nowrap">
-                        Rp {formatCurrency(transaction.amount)}
-                      </td>
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
+                      Tanggal
+                    </label>
 
-                      <td className="p-4 text-white/70">
-                        {getSourceLabel(transaction.source)}
-                      </td>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(event) => setDate(event.target.value)}
+                      className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+                      required
+                    />
+                  </div>
 
-                      <td className="p-4 max-w-[320px]">
-                        <div className="text-white/70 line-clamp-2">
-                          {transaction.note || "-"}
-                        </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase tracking-wide">
+                      Catatan
+                    </label>
 
-                        {transaction.ref && (
-                          <div className="text-xs text-white/35 mt-1">
-                            Referensi: {transaction.ref}
-                          </div>
-                        )}
-                      </td>
+                    <input
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                      placeholder="Catatan opsional"
+                      className="w-full bg-[#0f1117] border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+                    />
+                  </div>
+                </div>
 
-                      <td className="p-4">
-                        {canModify ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleEdit(transaction)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-djati-amber/40 text-djati-amber hover:bg-djati-amber/10 text-xs font-bold"
-                            >
-                              <Pencil size={13} />
-                              Edit
-                            </button>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-5">
+                  <p className="text-xs text-white/35">
+                    Biaya keluar dari perbaikan dan inventaris tetap tercatat
+                    otomatis, sehingga tidak perlu diinput manual.
+                  </p>
 
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(transaction)}
-                              disabled={
-                                actionLoadingId === `delete-${transaction.id}`
-                              }
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs font-bold disabled:opacity-50"
-                            >
-                              <Trash2 size={13} />
-                              Hapus
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-white/35">
-                            Otomatis
-                          </span>
-                        )}
-                      </td>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-djati-amber text-black font-bold rounded-xl px-5 py-3 disabled:opacity-50 min-w-[190px]"
+                  >
+                    {loading
+                      ? "Menyimpan..."
+                      : isEditing
+                      ? "Perbarui Dana Masuk"
+                      : "Simpan Dana Masuk"}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#171a23]/95 p-5 shadow-2xl shadow-black/20">
+              <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-5">
+                <div>
+                  <h2 className="text-lg font-bold text-djati-amber">
+                    Laporan Dana Perbaikan
+                  </h2>
+
+                  <p className="text-xs text-white/40 mt-1 max-w-2xl">
+                    Menampilkan riwayat dana masuk dan biaya keluar. Biaya otomatis
+                    dari perbaikan dan inventaris tidak bisa diedit atau dihapus.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full xl:w-auto">
+                  <input
+                    type="month"
+                    value={month}
+                    onChange={(event) => setMonth(event.target.value)}
+                    className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+                  />
+
+                  <select
+                    value={typeFilter}
+                    onChange={(event) => setTypeFilter(event.target.value)}
+                    className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+                  >
+                    <option value="">Semua Jenis</option>
+                    <option value="income">Dana Masuk</option>
+                    <option value="expense">Biaya Keluar</option>
+                  </select>
+
+                  <select
+                    value={sourceFilter}
+                    onChange={(event) => setSourceFilter(event.target.value)}
+                    className="bg-[#0f1117] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-djati-amber focus:ring-4 focus:ring-djati-amber/10"
+                  >
+                    <option value="">Semua Sumber</option>
+                    <option value="manual">Manual</option>
+                    <option value="repair">Perbaikan</option>
+                    <option value="inventory">Inventaris</option>
+                  </select>
+                </div>
+              </div>
+
+              {typeFilter || sourceFilter ? (
+                <div className="mb-4 rounded-xl border border-djati-amber/25 bg-djati-amber/10 px-4 py-3 text-xs text-djati-amber">
+                  Tabel sedang difilter. Ringkasan di atas tetap menghitung semua
+                  dana pada bulan yang dipilih.
+                </div>
+              ) : null}
+
+              <div className="overflow-x-auto rounded-2xl border border-white/10">
+                <table className="w-full text-sm min-w-[980px]">
+                  <thead className="bg-djati-amber text-black">
+                    <tr>
+                      <th className="p-4 text-left font-bold">Tanggal</th>
+                      <th className="p-4 text-left font-bold">Jenis</th>
+                      <th className="p-4 text-left font-bold">Kategori</th>
+                      <th className="p-4 text-left font-bold">Nominal</th>
+                      <th className="p-4 text-left font-bold">Sumber</th>
+                      <th className="p-4 text-left font-bold">Catatan / Ref</th>
+                      <th className="p-4 text-left font-bold">Aksi</th>
                     </tr>
-                  );
-                })}
+                  </thead>
 
-                {!transactions.length && !loading && (
-                  <tr>
-                    <td colSpan="7" className="p-6 text-center text-white/50">
-                      Tidak ada data dana perbaikan.
-                    </td>
-                  </tr>
-                )}
+                  <tbody>
+                    {transactions.map((transaction) => {
+                      const isDanaMasuk = transaction.type === "income";
+                      const canModify = isDanaMasuk && !transaction.locked;
 
-                {loading && (
-                  <tr>
-                    <td colSpan="7" className="p-6 text-center text-white/50">
-                      Memuat data dana perbaikan...
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                      return (
+                        <tr
+                          key={transaction.id}
+                          className="border-t border-white/10 hover:bg-white/[0.03]"
+                        >
+                          <td className="p-4 text-white/80 whitespace-nowrap">
+                            {formatDate(transaction.date)}
+                          </td>
+
+                          <td className="p-4">
+                            <span
+                              className={`inline-flex items-center px-3 py-1.5 rounded-full text-[0.68rem] font-bold uppercase border ${
+                                isDanaMasuk
+                                  ? "bg-green-500/10 text-green-400 border-green-500/25"
+                                  : "bg-red-500/10 text-red-400 border-red-500/25"
+                              }`}
+                            >
+                              {getTypeLabel(transaction.type)}
+                              {!isDanaMasuk ? " Otomatis" : ""}
+                            </span>
+                          </td>
+
+                          <td className="p-4">
+                            <div className="font-semibold text-white">
+                              {transaction.category || "-"}
+                            </div>
+
+                            <div className="text-xs text-white/35 mt-1">
+                              {transaction.locked
+                                ? "Terkunci / Otomatis"
+                                : "Manual"}
+                            </div>
+                          </td>
+
+                          <td className="p-4 font-bold text-djati-amber whitespace-nowrap">
+                            Rp {formatCurrency(transaction.amount)}
+                          </td>
+
+                          <td className="p-4 text-white/70">
+                            {getSourceLabel(transaction.source)}
+                          </td>
+
+                          <td className="p-4 max-w-[320px]">
+                            <div className="text-white/70 line-clamp-2">
+                              {transaction.note || "-"}
+                            </div>
+
+                            {transaction.ref && (
+                              <div className="text-xs text-white/35 mt-1">
+                                Referensi: {transaction.ref}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="p-4">
+                            {canModify ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEdit(transaction)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-djati-amber/40 text-djati-amber hover:bg-djati-amber/10 text-xs font-bold"
+                                >
+                                  <Pencil size={13} />
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(transaction)}
+                                  disabled={
+                                    actionLoadingId === `delete-${transaction.id}`
+                                  }
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs font-bold disabled:opacity-50"
+                                >
+                                  <Trash2 size={13} />
+                                  Hapus
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-white/35">
+                                Otomatis
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {!transactions.length && !loading && (
+                      <tr>
+                        <td
+                          colSpan="7"
+                          className="p-6 text-center text-white/50"
+                        >
+                          Tidak ada data dana perbaikan.
+                        </td>
+                      </tr>
+                    )}
+
+                    {loading && (
+                      <tr>
+                        <td
+                          colSpan="7"
+                          className="p-6 text-center text-white/50"
+                        >
+                          Memuat data dana perbaikan...
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         </div>
       </main>

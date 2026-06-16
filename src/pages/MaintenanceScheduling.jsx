@@ -18,6 +18,7 @@ import {
   getApprovedReports,
   getSchedules,
   approveBooking,
+  rejectBooking,
 } from '../services/scheduleService';
 
 const statusLabels = {
@@ -500,6 +501,51 @@ function EmptyState({ title, description, icon: Icon = ClipboardList }) {
   );
 }
 
+function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmText = 'Ya, Lanjutkan',
+  cancelText = 'Batal',
+  loading = false,
+  onConfirm,
+  onCancel,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#171a23] p-5 shadow-2xl">
+        <h3 className="text-base font-bold text-white">{title}</h3>
+
+        <p className="mt-2 text-sm leading-relaxed text-white/50">
+          {message}
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {cancelText}
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? 'Memproses...' : confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MaintenanceScheduling() {
   const navigate = useNavigate();
 
@@ -514,6 +560,8 @@ export default function MaintenanceScheduling() {
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState(null);
 
   const [notification, setNotification] = useState(null);
 
@@ -706,6 +754,54 @@ export default function MaintenanceScheduling() {
     }
   };
 
+
+  const openRejectDialog = (row) => {
+    if (!row?.bookingId) {
+      showNotification('warning', 'ID pemesanan tidak ditemukan.');
+      return;
+    }
+
+    setRejectTarget(row);
+  };
+
+  const closeRejectDialog = () => {
+    if (isRejecting) return;
+    setRejectTarget(null);
+  };
+
+  const confirmRejectBooking = async () => {
+    if (!rejectTarget?.bookingId) {
+      showNotification('warning', 'ID pemesanan tidak ditemukan.');
+      return;
+    }
+
+    try {
+      setIsRejecting(true);
+
+      await rejectBooking(rejectTarget.bookingId, {
+        note_admin: 'Permintaan jadwal ditolak oleh admin.',
+      });
+
+      setRejectTarget(null);
+
+      await loadAllData();
+
+      showNotification('success', 'Permintaan jadwal berhasil ditolak.');
+    } catch (error) {
+      console.error('GAGAL MENOLAK PERMINTAAN JADWAL:', error);
+
+      showNotification(
+        'error',
+        getFriendlyErrorMessage(
+          error,
+          'Permintaan jadwal belum dapat ditolak. Periksa data atau coba beberapa saat lagi.'
+        )
+      );
+    } finally {
+      setIsRejecting(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-[#0f1117] text-white">
       <Sidebar />
@@ -713,6 +809,17 @@ export default function MaintenanceScheduling() {
       <NotificationToast
         notification={notification}
         onClose={() => setNotification(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        title="Tolak Permintaan Jadwal"
+        message={`Apakah Anda yakin ingin menolak permintaan jadwal untuk ${rejectTarget?.equip || 'unit ini'}? Data akan berubah menjadi status Ditolak dan tidak tampil lagi di approval aktif.`}
+        confirmText="Ya, Tolak"
+        cancelText="Batal"
+        loading={isRejecting}
+        onConfirm={confirmRejectBooking}
+        onCancel={closeRejectDialog}
       />
 
       <main className="min-w-0 flex-1 overflow-x-hidden">
@@ -880,15 +987,27 @@ export default function MaintenanceScheduling() {
                           </td>
 
                           <td className="whitespace-nowrap px-5 py-4 text-right">
-                            <button
-                              type="button"
-                              disabled={isSubmitting}
-                              onClick={() => openScheduleModal(row)}
-                              className="inline-flex items-center gap-2 rounded-xl bg-djati-amber px-4 py-2.5 text-xs font-bold text-black transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              <CalendarCheck size={14} />
-                              Buat Jadwal
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={isSubmitting || isRejecting}
+                                onClick={() => openScheduleModal(row)}
+                                className="inline-flex items-center gap-2 rounded-xl bg-djati-amber px-4 py-2.5 text-xs font-bold text-black transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <CalendarCheck size={14} />
+                                Buat Jadwal
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={isSubmitting || isRejecting}
+                                onClick={() => openRejectDialog(row)}
+                                className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs font-bold text-red-400 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <XCircle size={14} />
+                                Tolak
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))

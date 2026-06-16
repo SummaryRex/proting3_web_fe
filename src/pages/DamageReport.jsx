@@ -9,7 +9,6 @@ import {
   getReports,
   getReportById,
   approveFollowUp,
-  rejectReport,
 } from "../services/reportService";
 
 const tableColumns = [
@@ -73,6 +72,12 @@ function normalizeStatusValue(value) {
 
 function collectStatusValues(report) {
   return [
+    report?.displayStatus,
+    report?.display_status,
+    report?.computedStatus,
+    report?.computed_status,
+    report?.damageReportStatus,
+    report?.damage_report_status,
     report?.status,
     report?.rawStatus,
     report?.bookingStatus,
@@ -82,9 +87,13 @@ function collectStatusValues(report) {
     report?.serviceBooking?.status,
     report?.latestServiceBooking?.status,
 
-    report?.raw?.status,
+    report?.raw?.display_status,
+    report?.raw?.displayStatus,
     report?.raw?.computed_status,
     report?.raw?.computedStatus,
+    report?.raw?.damage_report_status,
+    report?.raw?.damageReportStatus,
+    report?.raw?.status,
 
     report?.raw?.booking_status,
     report?.raw?.bookingStatus,
@@ -100,6 +109,118 @@ function collectStatusValues(report) {
     report?.raw?.latest_technician_response?.status,
     report?.raw?.latestTechnicianResponse?.status,
   ].map(normalizeStatusValue);
+}
+
+function collectBookingStatusValues(report) {
+  return [
+    report?.bookingStatus,
+    report?.booking_status,
+    report?.serviceBookingStatus,
+    report?.service_booking_status,
+    report?.rawBookingStatus,
+
+    report?.booking?.status,
+    report?.serviceBooking?.status,
+    report?.latestServiceBooking?.status,
+
+    report?.raw?.booking_status,
+    report?.raw?.bookingStatus,
+    report?.raw?.service_booking_status,
+    report?.raw?.serviceBookingStatus,
+    report?.raw?.latest_service_booking?.status,
+    report?.raw?.latestServiceBooking?.status,
+    report?.raw?.service_booking?.status,
+    report?.raw?.serviceBooking?.status,
+    report?.raw?.booking?.status,
+  ].map(normalizeStatusValue);
+}
+
+function collectTechnicianStatusValues(report) {
+  return [
+    report?.latestTechnicianResponse?.status,
+    report?.latest_technician_response?.status,
+    report?.technicianResponse?.status,
+    report?.technician_response?.status,
+
+    report?.raw?.latest_technician_response?.status,
+    report?.raw?.latestTechnicianResponse?.status,
+    report?.raw?.technician_response?.status,
+    report?.raw?.technicianResponse?.status,
+  ].map(normalizeStatusValue);
+}
+
+function hasStartedTimestamp(report) {
+  return !isEmptyValue(
+    firstValid(
+      report?.startedAt,
+      report?.started_at,
+      report?.serviceStartedAt,
+      report?.service_started_at,
+      report?.repairStartedAt,
+      report?.repair_started_at,
+
+      report?.booking?.started_at,
+      report?.serviceBooking?.started_at,
+      report?.latestServiceBooking?.started_at,
+
+      report?.raw?.started_at,
+      report?.raw?.service_started_at,
+      report?.raw?.repair_started_at,
+      report?.raw?.latest_service_booking?.started_at,
+      report?.raw?.latestServiceBooking?.started_at,
+      report?.raw?.service_booking?.started_at,
+      report?.raw?.serviceBooking?.started_at,
+      report?.raw?.booking?.started_at
+    )
+  );
+}
+
+function isBookingApprovedOrScheduled(report) {
+  const bookingValues = collectBookingStatusValues(report);
+
+  return bookingValues.some((value) =>
+    ["approved", "scheduled", "rescheduled"].includes(value)
+  );
+}
+
+function hasRealTechnicianStartSignal(report) {
+  const bookingValues = collectBookingStatusValues(report);
+  const technicianValues = collectTechnicianStatusValues(report);
+
+  const progressValues = [
+    "proses",
+    "diproses",
+    "dalam_proses",
+    "sedang_diproses",
+    "ongoing",
+    "in_progress",
+    "progress",
+    "started",
+    "start_job",
+    "job_started",
+    "repair_started",
+    "repair_in_progress",
+    "technician_started",
+    "working",
+    "on_progress",
+  ];
+
+  return (
+    bookingValues.some((value) => progressValues.includes(value)) ||
+    technicianValues.some((value) => progressValues.includes(value)) ||
+    hasStartedTimestamp(report)
+  );
+}
+
+function isApprovedBookingWithoutTechnicianStart(report) {
+  return (
+    isBookingApprovedOrScheduled(report) &&
+    !hasRealTechnicianStartSignal(report) &&
+    !isWaitingPartsReport(report) &&
+    !isCompletedReport(report) &&
+    !isCanceledOrRejected(report) &&
+    !isFatalReport(report)
+  );
 }
 
 function isCompletedReport(report) {
@@ -140,6 +261,10 @@ function isWaitingPartsReport(report) {
 }
 
 function isStartedOrInProgressReport(report) {
+  if (isApprovedBookingWithoutTechnicianStart(report)) {
+    return false;
+  }
+
   const values = collectStatusValues(report);
 
   return values.some((value) =>
@@ -190,6 +315,10 @@ function isFatalReport(report) {
 }
 
 function isReportedReport(report) {
+  if (isApprovedBookingWithoutTechnicianStart(report)) {
+    return true;
+  }
+
   const values = collectStatusValues(report);
 
   return values.some((value) =>
@@ -436,7 +565,7 @@ function mergeReportForModal(listReport, detailReport) {
     getSparePartsForMerge(listReport)
   );
 
-  return {
+  const mergedReport = {
     ...listReport,
     ...detailReport,
 
@@ -513,6 +642,17 @@ function mergeReportForModal(listReport, detailReport) {
       part_usages: spareParts,
     },
   };
+
+  const displayStatus = getDisplayStatus(mergedReport);
+
+  return {
+    ...mergedReport,
+    status: displayStatus,
+    displayStatus,
+    display_status: displayStatus,
+    computedStatus: displayStatus,
+    computed_status: displayStatus,
+  };
 }
 
 function getDisplayStatus(report) {
@@ -525,6 +665,29 @@ function getDisplayStatus(report) {
   if (isReportedReport(report)) return "Dilaporkan";
 
   return firstValid(report?.status, report?.raw?.status, "-");
+}
+
+function getStatusBadgeVariant(report) {
+  if (isFatalReport(report)) return "fatal";
+  if (isRejectedReport(report)) return "rejected";
+  if (isCanceledReport(report)) return "canceled";
+  if (isCompletedReport(report)) return "selesai";
+  if (isWaitingPartsReport(report)) return "butuh_followup_admin";
+  if (isStartedOrInProgressReport(report)) return "proses";
+  if (isReportedReport(report)) return "reported";
+
+  return normalizeStatusValue(
+    firstValid(
+      report?.computed_status,
+      report?.computedStatus,
+      report?.display_status,
+      report?.displayStatus,
+      report?.status,
+      report?.raw?.computed_status,
+      report?.raw?.computedStatus,
+      report?.raw?.status
+    )
+  );
 }
 
 function getReportId(report) {
@@ -595,51 +758,6 @@ function NotificationToast({ notification, onClose }) {
   );
 }
 
-function ConfirmDialog({
-  open,
-  title,
-  message,
-  confirmText = "Ya, Lanjutkan",
-  cancelText = "Batal",
-  loading = false,
-  onConfirm,
-  onCancel,
-}) {
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-djati-border-light bg-[#0f1117] p-5 shadow-2xl">
-        <h3 className="text-base font-bold text-white">{title}</h3>
-
-        <p className="mt-2 text-sm leading-relaxed text-djati-muted">
-          {message}
-        </p>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={loading}
-            className="btn-ghost px-4 py-2 text-[0.78rem] font-semibold !rounded-lg disabled:opacity-60"
-          >
-            {cancelText}
-          </button>
-
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={loading}
-            className="btn-danger-outline px-4 py-2 text-[0.78rem] font-semibold !rounded-lg disabled:opacity-60"
-          >
-            {loading ? "Memproses..." : confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function DamageReport() {
   const [activeFilter, setActiveFilter] = useState("Semua");
   const [searchQuery, setSearchQuery] = useState("");
@@ -648,8 +766,6 @@ export default function DamageReport() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [notification, setNotification] = useState(null);
-  const [rejectTargetId, setRejectTargetId] = useState(null);
-  const [isRejecting, setIsRejecting] = useState(false);
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
@@ -767,42 +883,6 @@ export default function DamageReport() {
     }
   };
 
-  const handleReject = (id) => {
-    if (!id) {
-      showNotification("warning", "ID laporan tidak ditemukan.");
-      return;
-    }
-
-    setRejectTargetId(id);
-  };
-
-  const handleConfirmReject = async () => {
-    if (!rejectTargetId) {
-      showNotification("warning", "ID laporan tidak ditemukan.");
-      return;
-    }
-
-    try {
-      setIsRejecting(true);
-
-      await rejectReport(rejectTargetId);
-
-      setRejectTargetId(null);
-      closeDetail();
-      await fetchReports();
-
-      showNotification("success", "Laporan berhasil ditolak.");
-    } catch (err) {
-      console.error("GAGAL MENOLAK LAPORAN:", err);
-
-      showNotification(
-        "error",
-        "Laporan belum dapat ditolak. Pastikan data sudah benar dan coba kembali."
-      );
-    } finally {
-      setIsRejecting(false);
-    }
-  };
 
   const handleSearch = (e) => {
     setSearchQuery(e.target.value);
@@ -815,17 +895,6 @@ export default function DamageReport() {
       <NotificationToast
         notification={notification}
         onClose={() => setNotification(null)}
-      />
-
-      <ConfirmDialog
-        open={Boolean(rejectTargetId)}
-        title="Tolak Laporan"
-        message="Apakah Anda yakin ingin menolak laporan ini? Tindakan ini akan mengubah status laporan menjadi ditolak."
-        confirmText="Ya, Tolak Laporan"
-        cancelText="Batal"
-        loading={isRejecting}
-        onConfirm={handleConfirmReject}
-        onCancel={() => setRejectTargetId(null)}
       />
 
       <main className="min-w-0 flex-1 overflow-x-hidden">
@@ -931,6 +1000,7 @@ export default function DamageReport() {
 
             const reportDate = getReportDate(report);
             const displayStatus = getDisplayStatus(report);
+            const statusBadgeVariant = getStatusBadgeVariant(report);
 
             const equipmentName =
               report.equipmentName ||
@@ -1032,7 +1102,7 @@ export default function DamageReport() {
                 </td>
 
                 <td className="px-4 py-3.5">
-                  <StatusBadge variant={report.status || displayStatus}>
+                  <StatusBadge variant={statusBadgeVariant}>
                     {displayStatus}
                   </StatusBadge>
                 </td>
@@ -1068,19 +1138,6 @@ export default function DamageReport() {
                         Setujui Follow-up
                       </button>
                     )}
-
-                    {!isCompleted &&
-                      !isCanceledRejected &&
-                      !isStartedOrInProgress &&
-                      !isFatal && (
-                        <button
-                          type="button"
-                          onClick={() => handleReject(reportId)}
-                          className="btn-danger-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
-                        >
-                          Tolak
-                        </button>
-                      )}
                   </div>
                 </td>
               </tr>
@@ -1105,7 +1162,6 @@ export default function DamageReport() {
               data={modalData}
               onClose={closeDetail}
               onApprove={handleApprove}
-              onReject={handleReject}
             />
           </div>
         </div>
