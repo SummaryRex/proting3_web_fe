@@ -1,4 +1,3 @@
-import { MessageSquare } from 'lucide-react';
 import StatusBadge from '../ui/StatusBadge';
 
 const API_STORAGE_URL = 'http://127.0.0.1:8000/storage';
@@ -888,10 +887,6 @@ export default function DamageDetailModal({
                     Driver
                   </small>
                 </div>
-
-                <button className="w-9 h-9 rounded-lg border border-[rgba(255,179,0,0.3)] bg-[rgba(255,179,0,0.08)] text-djati-amber cursor-pointer flex items-center justify-center flex-shrink-0 hover:bg-[rgba(255,179,0,0.18)] transition-colors">
-                  <MessageSquare size={18} />
-                </button>
               </div>
             </div>
 

@@ -26,9 +26,7 @@ const statusFilters = [
   "Semua",
   "Dilaporkan",
   "Dalam Proses",
-  "Menunggu Sparepart",
   "Selesai",
-  "Fatal",
   "Ditolak",
   "Dibatalkan",
 ];
@@ -359,21 +357,8 @@ function matchesStatusFilter(report, filter) {
     );
   }
 
-  if (filter === "Menunggu Sparepart") {
-    return (
-      isWaitingPartsReport(report) &&
-      !isCompletedReport(report) &&
-      !isCanceledOrRejected(report) &&
-      !isFatalReport(report)
-    );
-  }
-
   if (filter === "Selesai") {
     return isCompletedReport(report);
-  }
-
-  if (filter === "Fatal") {
-    return isFatalReport(report);
   }
 
   if (filter === "Ditolak") {
@@ -869,10 +854,7 @@ export default function DamageReport() {
       closeDetail();
       await fetchReports();
 
-      showNotification(
-        "success",
-        "Follow-up laporan berhasil disetujui."
-      );
+      showNotification("success", "Follow-up laporan berhasil disetujui.");
     } catch (err) {
       console.error("GAGAL MENYETUJUI FOLLOW-UP:", err);
 
@@ -882,7 +864,6 @@ export default function DamageReport() {
       );
     }
   };
-
 
   const handleSearch = (e) => {
     setSearchQuery(e.target.value);
@@ -911,252 +892,252 @@ export default function DamageReport() {
 
               <p className="mt-2 max-w-4xl text-sm leading-6 text-white/45">
                 Pantau laporan kerusakan kendaraan, lihat detail foto dan KPI,
-                serta proses follow-up laporan tanpa mengubah bentuk tabel yang sudah ada.
+                serta proses follow-up laporan tanpa mengubah bentuk tabel yang
+                sudah ada.
               </p>
             </header>
 
             <section className="mb-5 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#171a23]/95 px-5 py-4 shadow-2xl shadow-black/20 lg:flex-row lg:items-center lg:justify-between">
-        <SearchInput
-          placeholder="Cari laporan, kendaraan, atau pengemudi..."
-          value={searchQuery}
-          onChange={handleSearch}
-          className="w-full lg:flex-[0_1_420px]"
-        />
+              <SearchInput
+                placeholder="Cari laporan, kendaraan, atau pengemudi..."
+                value={searchQuery}
+                onChange={handleSearch}
+                className="w-full lg:flex-[0_1_420px]"
+              />
 
-        <div className="flex items-center gap-3">
-          <label
-            htmlFor="status-filter"
-            className="text-[0.8rem] text-djati-muted font-medium whitespace-nowrap"
-          >
-            Filter Status:
-          </label>
-
-          <div className="relative">
-            <select
-              id="status-filter"
-              value={activeFilter}
-              onChange={(e) => setActiveFilter(e.target.value)}
-              className="
-                min-w-[220px]
-                appearance-none
-                rounded-lg
-                border
-                border-djati-border-light
-                bg-[#0f1117]
-                px-4
-                py-2.5
-                pr-10
-                text-[0.82rem]
-                font-semibold
-                text-djati-amber
-                outline-none
-                transition-all
-                duration-200
-                hover:border-djati-amber
-                focus:border-djati-amber
-                focus:ring-4
-                focus:ring-djati-amber/10
-                cursor-pointer
-              "
-            >
-              {statusFilters.map((status) => (
-                <option
-                  key={status}
-                  value={status}
-                  className="bg-[#0f1117] text-white"
+              <div className="flex items-center gap-3">
+                <label
+                  htmlFor="status-filter"
+                  className="text-[0.8rem] text-djati-muted font-medium whitespace-nowrap"
                 >
-                  {status}
-                </option>
-              ))}
-            </select>
+                  Filter Status:
+                </label>
 
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-djati-amber text-[0.7rem]">
-              ▼
-            </span>
-          </div>
-        </div>
-      </section>
+                <div className="relative">
+                  <select
+                    id="status-filter"
+                    value={activeFilter}
+                    onChange={(e) => setActiveFilter(e.target.value)}
+                    className="
+                      min-w-[220px]
+                      appearance-none
+                      rounded-lg
+                      border
+                      border-djati-border-light
+                      bg-[#0f1117]
+                      px-4
+                      py-2.5
+                      pr-10
+                      text-[0.82rem]
+                      font-semibold
+                      text-djati-amber
+                      outline-none
+                      transition-all
+                      duration-200
+                      hover:border-djati-amber
+                      focus:border-djati-amber
+                      focus:ring-4
+                      focus:ring-djati-amber/10
+                      cursor-pointer
+                    "
+                  >
+                    {statusFilters.map((status) => (
+                      <option
+                        key={status}
+                        value={status}
+                        className="bg-[#0f1117] text-white"
+                      >
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-djati-amber text-[0.7rem]">
+                    ▼
+                  </span>
+                </div>
+              </div>
+            </section>
 
             <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#171a23]/95 shadow-2xl shadow-black/20">
               <DataTable
-          columns={tableColumns}
-          data={reports}
-          className="!rounded-b-none !border-b-0"
-          renderRow={(report, index) => {
-            const reportId = getReportId(report) || `TEMP-${index + 1}`;
+                columns={tableColumns}
+                data={reports}
+                className="!rounded-b-none !border-b-0"
+                renderRow={(report, index) => {
+                  const reportId = getReportId(report) || `TEMP-${index + 1}`;
 
-            const isCompleted = isCompletedReport(report);
-            const isWaitingParts = isWaitingPartsReport(report);
-            const isCanceledRejected = isCanceledOrRejected(report);
-            const isStartedOrInProgress = isStartedOrInProgressReport(report);
-            const isFatal = isFatalReport(report);
+                  const isWaitingParts = isWaitingPartsReport(report);
+                  const isCanceledRejected = isCanceledOrRejected(report);
+                  const isFatal = isFatalReport(report);
 
-            const imagePath = getImagePath(report);
-            const imageUrl = getImageUrl(imagePath);
+                  const imagePath = getImagePath(report);
+                  const imageUrl = getImageUrl(imagePath);
 
-            const mttr = getKpiValueFromReport(report, "mttr");
-            const mtbf = getKpiValueFromReport(report, "mtbf");
-            const ma = getKpiValueFromReport(report, "ma");
+                  const mttr = getKpiValueFromReport(report, "mttr");
+                  const mtbf = getKpiValueFromReport(report, "mtbf");
+                  const ma = getKpiValueFromReport(report, "ma");
 
-            const reportDate = getReportDate(report);
-            const displayStatus = getDisplayStatus(report);
-            const statusBadgeVariant = getStatusBadgeVariant(report);
+                  const reportDate = getReportDate(report);
+                  const displayStatus = getDisplayStatus(report);
+                  const statusBadgeVariant = getStatusBadgeVariant(report);
 
-            const equipmentName =
-              report.equipmentName ||
-              report.equipName ||
-              report.equip ||
-              report.raw?.vehicle?.equipment_name ||
-              report.raw?.vehicle?.equipmentName ||
-              "Unit tidak diketahui";
+                  const equipmentName =
+                    report.equipmentName ||
+                    report.equipName ||
+                    report.equip ||
+                    report.raw?.vehicle?.equipment_name ||
+                    report.raw?.vehicle?.equipmentName ||
+                    "Unit tidak diketahui";
 
-            const plateNumber =
-              report.plateNumber ||
-              report.raw?.vehicle?.plate_number ||
-              report.raw?.vehicle?.plateNumber ||
-              "-";
+                  const plateNumber =
+                    report.plateNumber ||
+                    report.raw?.vehicle?.plate_number ||
+                    report.raw?.vehicle?.plateNumber ||
+                    "-";
 
-            const driverName =
-              report.driverName ||
-              report.operator ||
-              report.raw?.driver?.name ||
-              report.raw?.user?.name ||
-              "-";
+                  const driverName =
+                    report.driverName ||
+                    report.operator ||
+                    report.raw?.driver?.name ||
+                    report.raw?.user?.name ||
+                    "-";
 
-            return (
-              <tr key={reportId} className="table-row-hover">
-                <td className="px-4 py-3.5 text-[0.82rem] font-semibold">
-                  #{reportId}
-                </td>
+                  return (
+                    <tr key={reportId} className="table-row-hover">
+                      <td className="px-4 py-3.5 text-[0.82rem] font-semibold">
+                        #{reportId}
+                      </td>
 
-                <td className="px-4 py-3.5">
-                  {imageUrl ? (
-                    <button
-                      type="button"
-                      onClick={() => window.open(imageUrl, "_blank")}
-                      className="block"
-                      title="Buka foto kerusakan"
-                    >
-                      <img
-                        src={imageUrl}
-                        alt={`Foto kerusakan laporan ${reportId}`}
-                        className="
-                          w-[72px]
-                          h-[72px]
-                          object-cover
-                          rounded-lg
-                          border
-                          border-djati-border-light
-                          hover:border-djati-amber
-                          transition-all
-                        "
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
+                      <td className="px-4 py-3.5">
+                        {imageUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => window.open(imageUrl, "_blank")}
+                            className="block"
+                            title="Buka foto kerusakan"
+                          >
+                            <img
+                              src={imageUrl}
+                              alt={`Foto kerusakan laporan ${reportId}`}
+                              className="
+                                w-[72px]
+                                h-[72px]
+                                object-cover
+                                rounded-lg
+                                border
+                                border-djati-border-light
+                                hover:border-djati-amber
+                                transition-all
+                              "
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
 
-                          const fallback =
-                            e.currentTarget.parentElement?.nextElementSibling;
+                                const fallback =
+                                  e.currentTarget.parentElement
+                                    ?.nextElementSibling;
 
-                          if (fallback) {
-                            fallback.classList.remove("hidden");
-                          }
-                        }}
-                      />
-                    </button>
-                  ) : null}
+                                if (fallback) {
+                                  fallback.classList.remove("hidden");
+                                }
+                              }}
+                            />
+                          </button>
+                        ) : null}
 
-                  <div
-                    className={`
-                      ${imageUrl ? "hidden" : ""}
-                      w-[72px]
-                      h-[72px]
-                      rounded-lg
-                      border
-                      border-dashed
-                      border-djati-border-light
-                      flex
-                      items-center
-                      justify-center
-                      text-[0.68rem]
-                      text-djati-muted
-                      text-center
-                      px-2
-                    `}
-                  >
-                    Tidak Ada Foto
-                  </div>
-                </td>
+                        <div
+                          className={`
+                            ${imageUrl ? "hidden" : ""}
+                            w-[72px]
+                            h-[72px]
+                            rounded-lg
+                            border
+                            border-dashed
+                            border-djati-border-light
+                            flex
+                            items-center
+                            justify-center
+                            text-[0.68rem]
+                            text-djati-muted
+                            text-center
+                            px-2
+                          `}
+                        >
+                          Tidak Ada Foto
+                        </div>
+                      </td>
 
-                <td className="px-4 py-3.5 text-[0.82rem]">
-                  <div className="font-semibold">{equipmentName}</div>
-                  <div className="text-[0.72rem] text-djati-muted">
-                    Nomor Polisi: {plateNumber}
-                  </div>
-                </td>
+                      <td className="px-4 py-3.5 text-[0.82rem]">
+                        <div className="font-semibold">{equipmentName}</div>
+                        <div className="text-[0.72rem] text-djati-muted">
+                          Nomor Polisi: {plateNumber}
+                        </div>
+                      </td>
 
-                <td className="px-4 py-3.5 text-[0.82rem]">
-                  {driverName}
-                </td>
+                      <td className="px-4 py-3.5 text-[0.82rem]">
+                        {driverName}
+                      </td>
 
-                <td className="px-4 py-3.5 text-[0.82rem]">
-                  {formatDate(reportDate)}
-                </td>
+                      <td className="px-4 py-3.5 text-[0.82rem]">
+                        {formatDate(reportDate)}
+                      </td>
 
-                <td className="px-4 py-3.5">
-                  <StatusBadge variant={statusBadgeVariant}>
-                    {displayStatus}
-                  </StatusBadge>
-                </td>
+                      <td className="px-4 py-3.5">
+                        <StatusBadge variant={statusBadgeVariant}>
+                          {displayStatus}
+                        </StatusBadge>
+                      </td>
 
-                <td className="px-4 py-3.5 text-[0.78rem]">
-                  {hasKpi(report) ? (
-                    <div className="space-y-1 text-djati-muted">
-                      <div>MTTR: {formatKpiValue(mttr, " jam")}</div>
-                      <div>MTBF: {formatKpiValue(mtbf, " jam")}</div>
-                      <div>MA: {formatKpiValue(ma, "%")}</div>
-                    </div>
-                  ) : (
-                    <span className="text-djati-muted">-</span>
-                  )}
-                </td>
+                      <td className="px-4 py-3.5 text-[0.78rem]">
+                        {hasKpi(report) ? (
+                          <div className="space-y-1 text-djati-muted">
+                            <div>MTTR: {formatKpiValue(mttr, " jam")}</div>
+                            <div>MTBF: {formatKpiValue(mtbf, " jam")}</div>
+                            <div>MA: {formatKpiValue(ma, "%")}</div>
+                          </div>
+                        ) : (
+                          <span className="text-djati-muted">-</span>
+                        )}
+                      </td>
 
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => openDetail(report)}
-                      className="btn-ghost px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
-                    >
-                      Lihat Detail
-                    </button>
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => openDetail(report)}
+                            className="btn-ghost px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
+                          >
+                            Lihat Detail
+                          </button>
 
-                    {isWaitingParts && !isCanceledRejected && !isFatal && (
-                      <button
-                        type="button"
-                        onClick={() => handleApprove(reportId)}
-                        className="btn-success-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
-                      >
-                        Setujui Follow-up
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          }}
-        />
+                          {isWaitingParts && !isCanceledRejected && !isFatal && (
+                            <button
+                              type="button"
+                              onClick={() => handleApprove(reportId)}
+                              className="btn-success-outline px-3 py-1.5 text-[0.72rem] font-semibold !rounded-md"
+                            >
+                              Setujui Follow-up
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }}
+              />
 
-        {isLoading && (
-          <div className="border-t border-white/10 bg-[#171a23]/95 px-5 py-4 text-sm text-djati-muted">
-            Memuat data laporan...
-          </div>
-        )}
+              {isLoading && (
+                <div className="border-t border-white/10 bg-[#171a23]/95 px-5 py-4 text-sm text-djati-muted">
+                  Memuat data laporan...
+                </div>
+              )}
 
-        {!isLoading && reports.length === 0 && (
-          <div className="border-t border-white/10 bg-[#171a23]/95 px-5 py-4 text-sm text-djati-muted">
-            Tidak ada laporan yang sesuai dengan filter ini.
-          </div>
-        )}
-      </section>
+              {!isLoading && reports.length === 0 && (
+                <div className="border-t border-white/10 bg-[#171a23]/95 px-5 py-4 text-sm text-djati-muted">
+                  Tidak ada laporan yang sesuai dengan filter ini.
+                </div>
+              )}
+            </section>
 
             <DamageDetailModal
               data={modalData}
