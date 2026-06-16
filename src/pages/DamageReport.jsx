@@ -31,15 +31,8 @@ const statusFilters = [
   "Dibatalkan",
 ];
 
-const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "")
-  .replace(/\/api\/?$/, "")
-  .replace(/\/$/, "");
-
-const API_STORAGE_URL = String(
-  import.meta.env.VITE_STORAGE_URL ||
-    import.meta.env.VITE_API_STORAGE_URL ||
-    (API_BASE_URL ? `${API_BASE_URL}/storage` : "/storage")
-).replace(/\/$/, "");
+const _API_BASE = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api').replace(/\/api\/?$/, '');
+const API_STORAGE_URL = `${_API_BASE}/storage`;
 
 function isEmptyValue(value) {
   return (
